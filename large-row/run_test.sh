@@ -1,0 +1,1 @@
+../bin/spark-submit --driver-memory 6g builtin_upper.py -d large_string_100row_10col_20m
