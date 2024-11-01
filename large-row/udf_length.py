@@ -23,7 +23,7 @@ df.createOrReplaceTempView("T")
 df.printSchema()
 print("n_row:", df.count(), "n_col:", len(df.columns))
 
-df_length = spark.sql("SELECT udf_length(string_1) FROM T")
+df_length = spark.sql("SELECT udf_length(string_0) FROM T")
 df_length.write.parquet(f"output_udf_length_{ct}.parquet", mode="overwrite")
 df_length.show(1)
 spark.stop()
