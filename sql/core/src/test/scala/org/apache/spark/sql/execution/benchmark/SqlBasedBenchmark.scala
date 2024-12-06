@@ -81,7 +81,7 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
    * Prepares a table with wide row for benchmarking. The table will be written into
    * the given path.
    */
-  protected  def writeWideRow(path: String, rowsNum: Int, numCols: Int): StructType = {
+  protected def writeWideRow(path: String, rowsNum: Int, numCols: Int): StructType = {
     val fields = Seq.tabulate(numCols)(i => StructField(s"col$i", IntegerType))
     val schema = StructType(fields)
 
@@ -90,6 +90,12 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
       .write.json(path)
 
     schema
+  }
+
+  protected def writeLargeRow(path: String, rowsNum: Int, numCols: Int, cellSize: Int): Unit = {
+    spark.range(rowsNum)
+      .select(Seq.tabulate(numCols)(i => lit("a" * cellSize * 1024 * 1024).as(s"col$i")): _*)
+      .write.parquet(path)
   }
 
   override def afterAll(): Unit = {
