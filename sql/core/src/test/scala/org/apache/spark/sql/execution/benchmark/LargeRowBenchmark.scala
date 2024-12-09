@@ -48,7 +48,7 @@ object LargeRowBenchmark extends SqlBasedBenchmark {
 
       val benchmarks = Array(
         //        Map("rows" -> 100, "cols" -> 10, "cellSize_mb" -> 1) //  OutOfMemory @ 100, 10, 2
-        Map("rows" -> 1, "cols" -> 1, "cellSize_mb" -> 300)
+        Map("rows" -> 1, "cols" -> 1, "cellSize_mb" -> 500)
         //        Map("rows" -> 1, "cols" -> 100, "cellSize_mb" -> 1),
         //        Map("rows" -> 1000, "cols" -> 1, "cellSize_mb" -> 1)
       )
