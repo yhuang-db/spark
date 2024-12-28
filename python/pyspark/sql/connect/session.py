@@ -790,13 +790,11 @@ class SparkSession:
 
     range.__doc__ = PySparkSession.range.__doc__
 
-    @property
+    @functools.cached_property
     def catalog(self) -> "Catalog":
         from pyspark.sql.connect.catalog import Catalog
 
-        if not hasattr(self, "_catalog"):
-            self._catalog = Catalog(self)
-        return self._catalog
+        return Catalog(self)
 
     catalog.__doc__ = PySparkSession.catalog.__doc__
 
@@ -1044,7 +1042,7 @@ class SparkSession:
             default_conf = {
                 "spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin",
                 "spark.sql.artifact.isolation.enabled": "true",
-                "spark.sql.artifact.isolation.always.apply.classloader": "true",
+                "spark.sql.artifact.isolation.alwaysApplyClassloader": "true",
             }
 
             if "SPARK_TESTING" in os.environ:
