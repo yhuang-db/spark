@@ -51,7 +51,8 @@ object LargeRowBenchmark extends SqlBasedBenchmark {
 //        Map("rows" -> 1, "cols" -> 1, "cellSize_mb" -> 400), //  OutOfMemory @ 1, 1, 500
 //        Map("rows" -> 1, "cols" -> 200, "cellSize_mb" -> 1), //  OutOfMemory @ 1, 300, 1
 //        Map("rows" -> 10000, "cols" -> 1, "cellSize_mb" -> 5) //  OutOfMemory @ 10000, 1, 10
-        Map("rows" -> 10000, "cols" -> 2, "cellSize_mb" -> 5) //  OutOfMemory @ 10000, 1, 10
+//        Map("rows" -> 10000, "cols" -> 1, "cellSize_mb" -> 5) //  OutOfMemory @ 10000, 2, 5
+          Map("rows" -> 80000, "cols" -> 1, "cellSize_mb" -> 5) //  OutOfMemory @
       )
 
       benchmarks.foreach { b =>
