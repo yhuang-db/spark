@@ -17,18 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.common.SketchesArgumentException
+import org.apache.datasketches.common.{ArrayOfStringsSerDe, SketchesArgumentException}
+import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, StructField, StructType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -392,5 +394,152 @@ case class HllUnionAgg(
     } else {
       None
     }
+  }
+}
+
+// extends? with? with?
+case class SketchTopK(
+                       left: Expression,
+                       right: Expression,
+                       mutableAggBufferOffset: Int = 0,
+                       inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[ItemsSketch[String]]
+    with BinaryLike[Expression]
+    with ExpectsInputTypes {
+  // done
+  lazy val topK: Int = {
+    val topK = right.eval().asInstanceOf[Int]
+    topK
+  }
+
+  // done
+  def this(child: Expression, topK: Expression) = {
+    this(child, topK, 0, 0)
+  }
+
+  // done
+  def this(child: Expression, topK: Int) = {
+    this(child, Literal(topK), 0, 0)
+  }
+
+  // done
+  override def prettyName: String = "sketch_top_k"
+
+  // done
+  override def nullable: Boolean = false
+
+
+  // undone
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(
+        IntegerType,
+        LongType,
+        StringTypeWithCollation(supportsTrimCollation = true),
+        BinaryType),
+      IntegerType)
+
+  // done
+  override def createAggregationBuffer(): ItemsSketch[String] = {
+    new ItemsSketch[String](64)
+  }
+
+  // done?
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): SketchTopK = {
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+  }
+
+  // done?
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): SketchTopK = {
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+  }
+
+  // done?
+  override protected def withNewChildrenInternal(newLeft: Expression,
+                                                 newRight: Expression): SketchTopK = {
+    copy(left = newLeft, right = newRight)
+  }
+
+
+  // done
+  override def update(sketch: ItemsSketch[String], input: InternalRow): ItemsSketch[String] = {
+    val v = left.eval(input)
+    if (v != null) {
+      left.dataType match {
+        case st: StringType =>
+          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
+          sketch.update(cKey.toString)
+        case dataType => throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3121",
+          messageParameters = Map("dataType" -> dataType.toString))
+      }
+    }
+    sketch
+  }
+
+  // done
+  override def merge(sketch: ItemsSketch[String],
+                     input: ItemsSketch[String]): ItemsSketch[String] = {
+    val union = new ItemsSketch[String](64)
+    union.merge(sketch)
+    union.merge(input)
+    union
+  }
+
+  // done
+  override def serialize(sketch: ItemsSketch[String]): Array[Byte] = {
+    sketch.toByteArray(new ArrayOfStringsSerDe())
+  }
+
+  // done
+  override def deserialize(buffer: Array[Byte]): ItemsSketch[String] = {
+    ItemsSketch.getInstance(Memory.wrap(buffer), new ArrayOfStringsSerDe())
+  }
+
+  // Return STRUCT<item: STRING, estimate: LONG, upper_bound: LONG, lower_bound: LONG>
+  // newly added
+  private val resultEntryType = StructType(
+    StructField("Item", StringType, nullable = false) ::
+      StructField("Estimate", LongType, nullable = false) ::
+      StructField("Upper Bound", LongType, nullable = false) ::
+      StructField("Lower Bound", LongType, nullable = false) :: Nil
+  )
+
+  // undone
+  def _dataType: DataType = ArrayType(resultEntryType)
+
+  // undone: return result type
+  def _eval(sketch: ItemsSketch[String]): Any = {
+    val items = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
+    var result = Array[Any]()
+    // scalastyle:off println
+    println("Frequent items: " + items.length)
+    println(ItemsSketch.Row.getRowHeader)
+    for (row <- items) {
+      val resultEntry = Row(row.getItem, row.getEstimate, row.getUpperBound, row.getLowerBound)
+      result :+= resultEntry
+      println(row.toString)
+    }
+    println(result.mkString("Array(", ", ", ")"))
+    println("result type: ", result.getClass)
+    // scalastyle:on println
+    new GenericArrayData(result)
+  }
+
+  // simple eval and return, return item string
+  override def dataType: DataType = ArrayType(left.dataType, containsNull = false)
+
+  def eval(sketch: ItemsSketch[String]): Any = {
+    val items = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
+
+    var result = Array[String]()
+    val resultLength = math.min(items.length, topK)
+    for (i <- 0 until resultLength) {
+      val row = items(i)
+      result :+= row.getItem
+    }
+
+    val finalResult = result.map(UTF8String.fromString)
+    new GenericArrayData(finalResult)
   }
 }

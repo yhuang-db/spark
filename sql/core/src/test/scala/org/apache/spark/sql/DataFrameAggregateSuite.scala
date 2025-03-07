@@ -1781,6 +1781,19 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(Array(1), Array(1)))
   }
 
+  test("SPARK-xxxxx: data scketch top-k tests") {
+    val df1 = Seq(
+      ("a"), ("a"), ("a"), ("b"), ("c"), ("c"), ("d")
+    ).toDF("value")
+    df1.createOrReplaceTempView("df1")
+
+    val res1 = df1.agg(sketch_top_k("value", 5))
+    checkAnswer(res1, Row(Array("a", "c", "d", "b")))
+
+    val res2 = sql("select sketch_top_k(value, 2) from df1")
+    checkAnswer(res2, Row(Array("a", "c")))
+  }
+
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
 
     val df1 = Seq(
