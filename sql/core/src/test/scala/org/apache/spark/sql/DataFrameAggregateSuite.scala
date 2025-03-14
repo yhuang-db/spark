@@ -1790,7 +1790,7 @@ class DataFrameAggregateSuite extends QueryTest
     val res1 = df1.agg(sketch_top_k("value", 5))
     checkAnswer(res1, Row(Seq(Row("c", 4), Row("d", 2), Row("a", 1), Row("b", 1))))
 
-    val res2 = sql("select sketch_top_k(value, 2) from df1")
+    val res2 = sql("SELECT sketch_top_k(value, 2) FROM df1")
     checkAnswer(res2, Row(Seq(Row("c", 4), Row("d", 2))))
 
     // Same example as https://docs.databricks.com/aws/en/sql/language-manual/functions/approx_top_k
@@ -1802,13 +1802,13 @@ class DataFrameAggregateSuite extends QueryTest
     res3.show()
     // scalastyle:on
 
-//    val res4 = sql(
-//      "SELECT sketch_top_k(expr, 3) " +
-//        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
-//    )
-//    // scalastyle:off
-//    res4.show()
-//    // scalastyle:on
+    // val res4 = sql(
+    //   "SELECT sketch_top_k(expr, 3) " +
+    //     "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
+    // )
+    // // scalastyle:off
+    // res4.show()
+    // // scalastyle:on
   }
 
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
