@@ -9352,7 +9352,7 @@
   },
   "_LEGACY_ERROR_TEMP_3263" : {
     "message" : [
-      "A ItemsSketch instance cannot be updates with a Spark <dataType> type"
+      "An ItemsSketch instance cannot be updates with a Spark <dataType> type"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

@@ -396,7 +396,7 @@ case class HllUnionAgg(
   }
 }
 
-
+// TODO: more types: Boolean, Double, Long, Number
 case class SketchTopK(
                        left: Expression,
                        right: Expression,
@@ -424,12 +424,7 @@ case class SketchTopK(
   override def nullable: Boolean = false
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(
-        StringTypeWithCollation(supportsTrimCollation = true),
-        LongType,
-        IntegerType),
-      IntegerType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType)
 
   override def createAggregationBuffer(): ItemsSketch[String] = {
     left.dataType match {
