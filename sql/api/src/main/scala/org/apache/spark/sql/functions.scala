@@ -653,6 +653,18 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns approximate top k (frequent) items of a column, using DataSketches
+   *
+   * @group agg_funcs
+   * @since 4.0.?
+   */
+  def sketch_top_k(e: Column, k: Int): Column =
+    Column.fn("sketch_top_k", e, lit(k))
+
+  def sketch_top_k(columnName: String, k: Int): Column =
+    sketch_top_k(Column(columnName), k)
+
+  /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
    * configured with lgConfigK arg.
    *
