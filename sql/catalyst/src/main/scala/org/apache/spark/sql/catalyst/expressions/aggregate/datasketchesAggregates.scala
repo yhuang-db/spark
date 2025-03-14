@@ -396,7 +396,7 @@ case class HllUnionAgg(
   }
 }
 
-// TypedImperativeAggregate type?
+
 case class SketchTopK(
                        left: Expression,
                        right: Expression,
@@ -423,7 +423,6 @@ case class SketchTopK(
 
   override def nullable: Boolean = false
 
-  // undone
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(
@@ -432,12 +431,11 @@ case class SketchTopK(
         IntegerType),
       IntegerType)
 
-  // undone: type
   override def createAggregationBuffer(): ItemsSketch[String] = {
     left.dataType match {
-      case st: StringType => new ItemsSketch[String](8)
+      case _: StringType => new ItemsSketch[String](8)
       case dataType => throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3121",
+        errorClass = "_LEGACY_ERROR_TEMP_3263",
         messageParameters = Map("dataType" -> dataType.toString))
     }
   }
@@ -455,7 +453,6 @@ case class SketchTopK(
     copy(left = newLeft, right = newRight)
   }
 
-  // undone: type
   override def update(sketch: ItemsSketch[String], input: InternalRow): ItemsSketch[String] = {
     val v = left.eval(input)
     if (v != null) {
@@ -464,14 +461,13 @@ case class SketchTopK(
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           sketch.update(cKey.toString)
         case dataType => throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3121",
+          errorClass = "_LEGACY_ERROR_TEMP_3263",
           messageParameters = Map("dataType" -> dataType.toString))
       }
     }
     sketch
   }
 
-  // undone: type
   override def merge(sketch: ItemsSketch[String],
                      input: ItemsSketch[String]): ItemsSketch[String] = {
     val union = new ItemsSketch[String](8)
@@ -480,17 +476,15 @@ case class SketchTopK(
     union
   }
 
-  // undone: type
   override def serialize(sketch: ItemsSketch[String]): Array[Byte] = {
     sketch.toByteArray(new ArrayOfStringsSerDe())
   }
 
-  // undone: type
   override def deserialize(buffer: Array[Byte]): ItemsSketch[String] = {
     ItemsSketch.getInstance(Memory.wrap(buffer), new ArrayOfStringsSerDe())
   }
 
-  // Return STRUCT<item: STRING, estimate: LONG>
+  // Return STRUCT<Item: String, Estimate: Long>
   private val resultEntryType = StructType(
     StructField("Item", StringType, nullable = false) ::
       StructField("Estimate", LongType, nullable = false) :: Nil
