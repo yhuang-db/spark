@@ -1802,13 +1802,25 @@ class DataFrameAggregateSuite extends QueryTest
     res3.show()
     // scalastyle:on
 
-    // val res4 = sql(
-    //   "SELECT sketch_top_k(expr, 3) " +
-    //     "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
-    // )
-    // // scalastyle:off
-    // res4.show()
-    // // scalastyle:on
+     val res4 = sql(
+       "SELECT sketch_top_k_any(expr, 3) " +
+         "FROM VALUES cast(0 AS LONG), cast(0 AS LONG), cast(1 AS LONG), cast(1 AS LONG), " +
+         "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);"
+     )
+     // scalastyle:off
+     res4.show()
+     // scalastyle:on
+
+    val res5 = sql(
+      "SELECT sketch_top_k_any(expr, 3) " +
+        "FROM VALUES cast(0.0 AS DOUBLE), cast(0.0 AS DOUBLE), " +
+        "cast(1.0 AS DOUBLE), cast(1.0 AS DOUBLE), " +
+        "cast(2.0 AS DOUBLE), cast(3.0 AS DOUBLE), " +
+        "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);"
+    )
+    // scalastyle:off
+    res5.show()
+    // scalastyle:on
   }
 
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {

@@ -527,6 +527,8 @@ object FunctionRegistry {
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
     expression[SketchTopK]("sketch_top_k"),
+    expression[SketchTopKLong]("sketch_top_k_long"),
+    expression[SketchTopKAny]("sketch_top_k_any"),
 
     // string functions
     expression[Ascii]("ascii"),
