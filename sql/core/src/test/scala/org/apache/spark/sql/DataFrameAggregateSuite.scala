@@ -1809,6 +1809,19 @@ class DataFrameAggregateSuite extends QueryTest
         "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);"
     )
     checkAnswer(res4, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
+
+    // scalastyle:off
+    val res6 = sql(
+      "SELECT sketch_top_k_accumulate(expr) " +
+        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
+    )
+    res6.show()
+    val res7 = sql(
+      "SELECT sketch_top_k_estimate(sketch_top_k_accumulate(expr), 5) " +
+        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
+    )
+    res7.show()
+    // scalastyle:on
   }
 
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {

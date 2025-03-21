@@ -527,6 +527,9 @@ object FunctionRegistry {
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
     expression[SketchTopK]("sketch_top_k"),
+    expression[SketchTopKAccumulate]("sketch_top_k_accumulate"),
+    expression[SketchTopKEstimate]("sketch_top_k_estimate"),
+//    expression[SketchTopKCombine]("sketch_top_k_combine"),
 
     // string functions
     expression[Ascii]("ascii"),

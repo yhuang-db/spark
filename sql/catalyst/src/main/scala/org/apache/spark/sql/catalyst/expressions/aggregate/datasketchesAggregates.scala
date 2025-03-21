@@ -25,7 +25,7 @@ import org.apache.datasketches.memory.Memory
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -548,5 +548,69 @@ case class SketchTopK(
       }
     }
     new GenericArrayData(result)
+  }
+}
+
+
+case class SketchTopKAccumulate(child: Expression,
+                                mutableAggBufferOffset: Int = 0,
+                                inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[ItemsSketch[Number]]
+    with UnaryLike[Expression] with ExpectsInputTypes {
+
+  def this(child: Expression) = this(child, 0, 0)
+
+  override def prettyName: String = "sketch_top_k_accumulate"
+
+  override def nullable: Boolean = false
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int):
+  SketchTopKAccumulate = copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): SketchTopKAccumulate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def withNewChildInternal(newChild: Expression): SketchTopKAccumulate =
+    copy(child = newChild)
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType, DoubleType,
+      StringTypeWithCollation(supportsTrimCollation = true)))
+
+  override def dataType: DataType = BinaryType
+
+  override def createAggregationBuffer(): ItemsSketch[Number] = new ItemsSketch[Number](8)
+
+  override def update(sketch: ItemsSketch[Number], input: InternalRow): ItemsSketch[Number] = {
+    val v = child.eval(input)
+    if (v != null) {
+      child.dataType match {
+        case _: IntegerType => sketch.update(v.asInstanceOf[Int])
+        case dataType => throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3263",
+          messageParameters = Map("dataType" -> dataType.toString))
+      }
+    }
+    sketch
+  }
+
+  override def merge(sketch: ItemsSketch[Number], input: ItemsSketch[Number]):
+  ItemsSketch[Number] = {
+    val union = new ItemsSketch[Number](8)
+    union.merge(sketch)
+    union.merge(input)
+    union
+  }
+
+  override def eval(sketch: ItemsSketch[Number]): Any = {
+    sketch.toByteArray(new ArrayOfNumbersSerDe())
+  }
+
+  override def serialize(sketch: ItemsSketch[Number]): Array[Byte] = {
+    sketch.toByteArray(new ArrayOfNumbersSerDe())
+  }
+
+  override def deserialize(buffer: Array[Byte]): ItemsSketch[Number] = {
+    ItemsSketch.getInstance(Memory.wrap(buffer), new ArrayOfNumbersSerDe())
   }
 }

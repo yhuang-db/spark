@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.datasketches.common.SketchesArgumentException
+import org.apache.datasketches.common.{ArrayOfNumbersSerDe, SketchesArgumentException}
+import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, BooleanType, DataType, IntegerType, LongType, StructField, StructType}
 
 @ExpressionDescription(
   usage = """
@@ -126,5 +129,44 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     union.update(sketch1)
     union.update(sketch2)
     union.getResult(targetType).toUpdatableByteArray
+  }
+}
+
+
+case class SketchTopKEstimate(left: Expression, right: Expression)
+  extends BinaryExpression with CodegenFallback with ExpectsInputTypes {
+
+  def this(child: Expression, topK: Int) = this(child, Literal(topK))
+
+  override def nullIntolerant: Boolean = true
+
+  override protected def withNewChildrenInternal(newLeft: Expression,
+                                                 newRight: Expression): SketchTopKEstimate =
+    copy(left = newLeft, right = newRight)
+
+  override def prettyName: String = "sketch_top_k_estimate"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType)
+
+  override def dataType: DataType = {
+    val resultEntryType = StructType(
+      StructField("Item", IntegerType, nullable = false) ::
+        StructField("Estimate", LongType, nullable = false) :: Nil
+    )
+    ArrayType(resultEntryType, containsNull = false)
+  }
+
+  override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val sketch = ItemsSketch.getInstance(Memory.wrap(input1.asInstanceOf[Array[Byte]]),
+      new ArrayOfNumbersSerDe())
+    val topK = input2.asInstanceOf[Int]
+    val items = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
+    val resultLength = math.min(items.length, topK)
+    val result = new Array[AnyRef](resultLength)
+    for (i <- 0 until resultLength) {
+      val row = items(i)
+      result(i) = InternalRow.apply(row.getItem, row.getEstimate)
+    }
+    new GenericArrayData(result)
   }
 }
