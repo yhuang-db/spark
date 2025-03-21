@@ -526,7 +526,7 @@ object FunctionRegistry {
     expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
-    expression[SketchTopK]("sketch_top_k"),
+    expression[ApproxTopK]("approx_top_k"),
 
     // string functions
     expression[Ascii]("ascii"),

@@ -397,13 +397,10 @@ case class HllUnionAgg(
 }
 
 /**
- * Abstract class for TopKSketches
+ * Abstract class for ApproxTopK
  */
-abstract class TopKSketch[T] extends TypedImperativeAggregate[ItemsSketch[T]] {
+abstract class AbsApproxTopK[T] extends TypedImperativeAggregate[ItemsSketch[T]] {
   val left: Expression
-  val right: Expression
-
-  lazy val topK: Int = { right.eval().asInstanceOf[Int] }
 
   override def merge(sketch: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] = {
     val union = new ItemsSketch[T](8)
@@ -412,9 +409,7 @@ abstract class TopKSketch[T] extends TypedImperativeAggregate[ItemsSketch[T]] {
     union
   }
 
-  override def createAggregationBuffer(): ItemsSketch[T] = {
-    new ItemsSketch[T](8)
-  }
+  override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](8)
 
   override def serialize(sketch: ItemsSketch[T]): Array[Byte] = {
     left.dataType match {
@@ -434,18 +429,18 @@ abstract class TopKSketch[T] extends TypedImperativeAggregate[ItemsSketch[T]] {
 
   override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = {
     left.dataType match {
-      case _: IntegerType =>
-        ItemsSketch.getInstance(Memory.wrap(buffer),
-          new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType =>
-        ItemsSketch.getInstance(Memory.wrap(buffer),
-          new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType =>
-        ItemsSketch.getInstance(Memory.wrap(buffer),
-          new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType =>
-        ItemsSketch.getInstance(Memory.wrap(buffer),
-          new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      case _: IntegerType => ItemsSketch.getInstance(
+        Memory.wrap(buffer),
+        new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      case _: LongType => ItemsSketch.getInstance(
+        Memory.wrap(buffer),
+        new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      case _: DoubleType => ItemsSketch.getInstance(
+        Memory.wrap(buffer),
+        new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      case _: StringType => ItemsSketch.getInstance(
+        Memory.wrap(buffer),
+        new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
       case dataType => throw new SparkUnsupportedOperationException(
         errorClass = "_LEGACY_ERROR_TEMP_3263",
         messageParameters = Map("dataType" -> dataType.toString))
@@ -467,22 +462,20 @@ abstract class TopKSketch[T] extends TypedImperativeAggregate[ItemsSketch[T]] {
   }
 }
 
-case class SketchTopK(
-    left: Expression,
-    right: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
-  extends TopKSketch[Any] with BinaryLike[Expression] with ExpectsInputTypes {
+case class ApproxTopK(
+                       left: Expression,
+                       right: Expression,
+                       mutableAggBufferOffset: Int = 0,
+                       inputAggBufferOffset: Int = 0)
+  extends AbsApproxTopK[Any]
+    with BinaryLike[Expression]
+    with ExpectsInputTypes {
 
-  def this(child: Expression, topK: Expression) = {
-    this(child, topK, 0, 0)
-  }
+  def this(child: Expression, topK: Expression) = this(child, topK, 0, 0)
 
-  def this(child: Expression, topK: Int) = {
-    this(child, Literal(topK), 0, 0)
-  }
+  def this(child: Expression, topK: Int) = this(child, Literal(topK), 0, 0)
 
-  override def prettyName: String = "sketch_top_k"
+  override def prettyName: String = "approx_top_k"
 
   override def nullable: Boolean = false
 
@@ -495,17 +488,17 @@ case class SketchTopK(
         StringTypeWithCollation(supportsTrimCollation = true)),
       IntegerType)
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): SketchTopK = {
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopK = {
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
   }
 
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): SketchTopK = {
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ApproxTopK = {
     copy(inputAggBufferOffset = newInputAggBufferOffset)
   }
 
   override protected def withNewChildrenInternal(
-    newLeft: Expression,
-    newRight: Expression): SketchTopK = {
+                                                  newLeft: Expression,
+                                                  newRight: Expression): ApproxTopK = {
     copy(left = newLeft, right = newRight)
   }
 
@@ -513,12 +506,9 @@ case class SketchTopK(
     val v = left.eval(input)
     if (v != null) {
       left.dataType match {
-        case _: IntegerType =>
-          sketch.update(v.asInstanceOf[Int])
-        case _: LongType =>
-          sketch.update(v.asInstanceOf[Long])
-        case _: DoubleType =>
-          sketch.update(v.asInstanceOf[Double])
+        case _: IntegerType => sketch.update(v.asInstanceOf[Int])
+        case _: LongType => sketch.update(v.asInstanceOf[Long])
+        case _: DoubleType => sketch.update(v.asInstanceOf[Double])
         case st: StringType =>
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           sketch.update(cKey.toString)
@@ -531,6 +521,7 @@ case class SketchTopK(
   }
 
   override def eval(sketch: ItemsSketch[Any]): Any = {
+    val topK = right.eval().asInstanceOf[Int]
     val items = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
     val resultLength = math.min(items.length, topK)
     val result = new Array[AnyRef](resultLength)

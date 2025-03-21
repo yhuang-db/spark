@@ -1781,28 +1781,28 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(Array(1), Array(1)))
   }
 
-  test("SPARK-xxxxx: data sketch top-k tests") {
+  test("SPARK-xxxxx: DataSketches-based approx top-k tests") {
     // Same test as in https://docs.databricks.com/aws/en/sql/language-manual/functions/approx_top_k
     val res1 = sql(
-      "SELECT sketch_top_k(expr, 5) " +
+      "SELECT approx_top_k(expr, 5) " +
         "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
     )
     checkAnswer(res1, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
 
     val res2 = sql(
-      "SELECT sketch_top_k(expr, 2) " +
+      "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
     checkAnswer(res2, Row(Seq(Row("c", 4), Row("d", 2))))
 
     val res3 = sql(
-      "SELECT sketch_top_k(expr, 2) " +
+      "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS LONG), cast(0 AS LONG), cast(1 AS LONG), cast(1 AS LONG), " +
         "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);"
     )
     checkAnswer(res3, Row(Seq(Row(0, 2), Row(4, 2))))
 
     val res4 = sql(
-      "SELECT sketch_top_k(expr, 2) " +
+      "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0.0 AS DOUBLE), cast(0.0 AS DOUBLE), " +
         "cast(1.0 AS DOUBLE), cast(1.0 AS DOUBLE), " +
         "cast(2.0 AS DOUBLE), cast(3.0 AS DOUBLE), " +
