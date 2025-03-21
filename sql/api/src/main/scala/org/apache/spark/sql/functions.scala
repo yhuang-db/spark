@@ -664,6 +664,24 @@ object functions {
   def sketch_top_k(columnName: String, k: Int): Column =
     sketch_top_k(Column(columnName), k)
 
+  def sketch_top_k_accumulate(e: Column): Column =
+    Column.fn("sketch_top_k_accumulate", e)
+
+  def sketch_top_k_accumulate(columnName: String): Column =
+    sketch_top_k_accumulate(Column(columnName))
+
+  def sketch_top_k_estimate(e: Column, k: Int): Column =
+    Column.fn("sketch_top_k_estimate", e, lit(k))
+
+  def sketch_top_k_estimate(columnName: String, k: Int): Column =
+    sketch_top_k_estimate(Column(columnName), k)
+
+  def sketch_top_k_combine(e: Column): Column =
+    Column.fn("sketch_top_k_combine", e)
+
+  def sketch_top_k_combine(e: String): Column =
+    sketch_top_k_combine(Column(e))
+
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
    * configured with lgConfigK arg.
