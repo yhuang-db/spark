@@ -614,3 +614,64 @@ case class SketchTopKAccumulate(child: Expression,
     ItemsSketch.getInstance(Memory.wrap(buffer), new ArrayOfNumbersSerDe())
   }
 }
+
+case class SketchTopKCombine(child: Expression,
+                             mutableAggBufferOffset: Int = 0,
+                             inputAggBufferOffset: Int = 0)
+  extends TypedImperativeAggregate[ItemsSketch[Number]]
+    with UnaryLike[Expression] with ExpectsInputTypes {
+
+  def this(child: Expression) = this(child, 0, 0)
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): SketchTopKCombine =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): SketchTopKCombine =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def withNewChildInternal(newChild: Expression): SketchTopKCombine =
+    copy(child = newChild)
+
+  override def prettyName: String = "sketch_top_k_combine"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+
+  override def dataType: DataType = BinaryType
+
+  override def nullable: Boolean = false
+
+  override def createAggregationBuffer(): ItemsSketch[Number] = new ItemsSketch[Number](8)
+
+  override def update(sketch: ItemsSketch[Number], input: InternalRow): ItemsSketch[Number] = {
+    val v = child.eval(input)
+    if (v != null) {
+      val inputSketch = ItemsSketch.getInstance(
+        Memory.wrap(v.asInstanceOf[Array[Byte]]), new ArrayOfNumbersSerDe())
+      val union = new ItemsSketch[Number](8)
+      union.merge(sketch)
+      union.merge(inputSketch)
+      return union
+    }
+    sketch
+  }
+
+  override def merge(sketch: ItemsSketch[Number], input: ItemsSketch[Number])
+  : ItemsSketch[Number] = {
+    val union = new ItemsSketch[Number](8)
+    union.merge(sketch)
+    union.merge(input)
+    union
+  }
+
+  override def eval(sketch: ItemsSketch[Number]): Any = {
+    sketch.toByteArray(new ArrayOfNumbersSerDe())
+  }
+
+  override def serialize(sketch: ItemsSketch[Number]): Array[Byte] = {
+    sketch.toByteArray(new ArrayOfNumbersSerDe())
+  }
+
+  override def deserialize(buffer: Array[Byte]): ItemsSketch[Number] = {
+    ItemsSketch.getInstance(Memory.wrap(buffer), new ArrayOfNumbersSerDe())
+  }
+}

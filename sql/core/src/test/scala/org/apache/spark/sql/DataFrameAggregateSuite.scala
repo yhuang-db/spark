@@ -1811,14 +1811,41 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res4, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
 
     // scalastyle:off
-    val res6 = sql(
-      "SELECT sketch_top_k_accumulate(expr) " +
+    val acc1 = sql(
+      "SELECT sketch_top_k_accumulate(expr) AS accumulate " +
         "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
-    )
+    ).toDF()
+    acc1.createOrReplaceTempView("acc1")
+    acc1.show()
+
+    val acc2 = sql(
+      "SELECT sketch_top_k_accumulate(expr) AS accumulate " +
+        "FROM VALUES (0), (1), (1), (2), (2), (2), (3), (4) AS tab(expr);"
+    ).toDF()
+    acc2.createOrReplaceTempView("acc2")
+
+    val combine = sql(
+      "SELECT sketch_top_k_combine(accumulate) AS combine " +
+        "FROM (SELECT accumulate FROM acc1 UNION ALL SELECT accumulate FROM acc2) t;"
+    ).toDF()
+    combine.createOrReplaceTempView("comb")
+    combine.show()
+
+    val res5 = sql("SELECT sketch_top_k_estimate(accumulate, 5) FROM acc1")
+    res5.show()
+
+    val res6 = sql("SELECT sketch_top_k_estimate(combine, 5) FROM comb")
     res6.show()
+
     val res7 = sql(
-      "SELECT sketch_top_k_estimate(sketch_top_k_accumulate(expr), 5) " +
-        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
+      "SELECT sketch_top_k_estimate(sketch_top_k_combine(sketch), 2) " +
+        "FROM(" +
+        "SELECT sketch_top_k_accumulate(expr) AS sketch " +
+        "FROM VALUES (0), (0), (0), (1), (2), (3), (4), (4) AS tab(expr)" +
+        " UNION ALL " +
+        "SELECT sketch_top_k_accumulate(expr) AS sketch " +
+        "FROM VALUES (0), (1), (1), (2), (2), (2), (3), (4) AS tab(expr)" +
+        ")"
     )
     res7.show()
     // scalastyle:on
