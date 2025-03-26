@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.common.SketchesArgumentException
+import org.apache.datasketches.common._
+import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
@@ -25,10 +26,10 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -392,5 +393,159 @@ case class HllUnionAgg(
     } else {
       None
     }
+  }
+}
+
+/**
+ * Abstract class for ApproxTopK
+ */
+abstract class AbsApproxTopK[T]
+  extends TypedImperativeAggregate[ItemsSketch[T]]
+    with ExpectsInputTypes {
+  val left: Expression
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(
+        BooleanType,
+        ByteType,
+        ShortType,
+        IntegerType,
+        LongType,
+        DecimalType,
+        FloatType,
+        DoubleType,
+        DateType,
+        TimestampType,
+        StringTypeWithCollation(supportsTrimCollation = true)),
+      IntegerType)
+
+  override def merge(sketch: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
+    sketch.merge(input)
+
+  override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](8)
+
+  override def serialize(sketch: ItemsSketch[T]): Array[Byte] = left.dataType match {
+    case _: BooleanType =>
+      sketch.toByteArray(new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: ByteType | _: ShortType | _: IntegerType |
+         _: FloatType | _: DateType =>
+      sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: LongType | _: TimestampType =>
+      sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DoubleType =>
+      sketch.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: StringType =>
+      sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DecimalType =>
+      sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+  }
+
+  override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = left.dataType match {
+    case _: BooleanType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: ByteType | _: ShortType | _: IntegerType |
+         _: FloatType | _: DateType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: LongType | _: TimestampType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DoubleType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: StringType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DecimalType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+  }
+
+  override def dataType: DataType = {
+    val resultEntryType = StructType(
+      StructField("Item", left.dataType, nullable = false) ::
+        StructField("Estimate", LongType, nullable = false) :: Nil
+    )
+    ArrayType(resultEntryType, containsNull = false)
+  }
+}
+
+case class ApproxTopK(
+                       left: Expression,
+                       right: Expression,
+                       mutableAggBufferOffset: Int = 0,
+                       inputAggBufferOffset: Int = 0)
+  extends AbsApproxTopK[Any]
+    with BinaryLike[Expression] {
+
+  def this(child: Expression, topK: Expression) = this(child, topK, 0, 0)
+
+  def this(child: Expression, topK: Int) = this(child, Literal(topK), 0, 0)
+
+  def this(child: Expression) = this(child, Literal(5), 0, 0)
+
+  override def prettyName: String = "approx_top_k"
+
+  override def nullable: Boolean = false
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopK =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ApproxTopK =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def withNewChildrenInternal(newLeft: Expression,
+                                                 newRight: Expression):
+  ApproxTopK = copy(left = newLeft, right = newRight)
+
+  override def update(sketch: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
+    val v = left.eval(input)
+    if (v != null) {
+      left.dataType match {
+        case _: BooleanType => sketch.update(v.asInstanceOf[Boolean])
+        case _: ByteType => sketch.update(v.asInstanceOf[Byte])
+        case _: ShortType => sketch.update(v.asInstanceOf[Short])
+        case _: IntegerType => sketch.update(v.asInstanceOf[Int])
+        case _: LongType => sketch.update(v.asInstanceOf[Long])
+        case _: FloatType => sketch.update(v.asInstanceOf[Float])
+        case _: DoubleType => sketch.update(v.asInstanceOf[Double])
+        case _: DateType => sketch.update(v.asInstanceOf[Int])
+        case _: TimestampType => sketch.update(v.asInstanceOf[Long])
+        case st: StringType =>
+          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
+          sketch.update(cKey.toString)
+        case _: DecimalType =>
+          val decimalString = v.asInstanceOf[Decimal].toString
+          val decimalUTF8String = UTF8String.fromString(decimalString)
+          val cKey = CollationFactory.getCollationKey(decimalUTF8String, StringType.collationId)
+          sketch.update(cKey.toString)
+      }
+    }
+    sketch
+  }
+
+  override def eval(sketch: ItemsSketch[Any]): Any = {
+    val topK = right.eval().asInstanceOf[Int]
+    val items = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
+    val resultLength = math.min(items.length, topK)
+    val result = new Array[AnyRef](resultLength)
+    for (i <- 0 until resultLength) {
+      val row = items(i)
+      left.dataType match {
+        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
+             _: FloatType | _: DoubleType | _: DateType | _: TimestampType =>
+          result(i) = InternalRow.apply(row.getItem, row.getEstimate)
+        case _: StringType =>
+          val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
+          result(i) = InternalRow.apply(item, row.getEstimate)
+        case _: DecimalType =>
+          val decimalString = row.getItem.asInstanceOf[String]
+          val decimalItem = Decimal(decimalString)
+          result(i) = InternalRow.apply(decimalItem, row.getEstimate)
+      }
+    }
+    new GenericArrayData(result)
   }
 }
