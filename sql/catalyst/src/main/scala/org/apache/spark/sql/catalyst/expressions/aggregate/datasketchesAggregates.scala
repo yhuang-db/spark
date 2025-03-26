@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.common.{ArrayOfDoublesSerDe, ArrayOfItemsSerDe, ArrayOfLongsSerDe, ArrayOfNumbersSerDe, ArrayOfStringsSerDe, SketchesArgumentException}
+import org.apache.datasketches.common._
 import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, BooleanType, DataType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TypeCollection}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -396,68 +396,117 @@ case class HllUnionAgg(
   }
 }
 
+// case class ArrayOfDecimalsSerDe() extends ArrayOfItemsSerDe[BigDecimal] {
+//  private val stringsSerDe = new ArrayOfStringsSerDe()
+//
+//  override def serializeToByteArray(item: BigDecimal): Array[Byte] = {
+//    Objects.requireNonNull(item, "Items must not be null")
+//    stringsSerDe.serializeToByteArray(item.toString())
+//  }
+//
+//  override def serializeToByteArray(items: Array[BigDecimal]): Array[Byte] = {
+//    Objects.requireNonNull(items, "Items must not be null")
+//    stringsSerDe.serializeToByteArray(items.map(_.toString()))
+//  }
+//
+//  override def deserializeFromMemory(mem: Memory, offsetBytes: Long, numItems: Int):
+//  Array[BigDecimal] = {
+//    val strings = stringsSerDe.deserializeFromMemory(mem, offsetBytes, numItems)
+//    strings.map(BigDecimal(_))
+//  }
+//
+//  override def sizeOf(item: BigDecimal): Int = {
+//    Objects.requireNonNull(item, "Items must not be null")
+//    val bigDecimalString = item.toString()
+//    if (bigDecimalString.isEmpty) Integer.BYTES
+//    bigDecimalString.getBytes(StandardCharsets.UTF_8).length + Integer.BYTES
+//  }
+//
+//  override def sizeOf(mem: Memory, offsetBytes: Long, numItems: Int): Int = {
+//    stringsSerDe.sizeOf(mem, offsetBytes, numItems)
+//  }
+//
+//  override def toString(item: BigDecimal): String = {
+//    if (item == null) return "null"
+//    item.toString()
+//  }
+//
+//  override def getClassOfT: Class[BigDecimal] = classOf[BigDecimal]
+// }
+
+
 /**
  * Abstract class for ApproxTopK
  */
-abstract class AbsApproxTopK[T] extends TypedImperativeAggregate[ItemsSketch[T]] {
+abstract class AbsApproxTopK[T]
+  extends TypedImperativeAggregate[ItemsSketch[T]]
+    with ExpectsInputTypes {
   val left: Expression
 
-  override def merge(sketch: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] = {
-    val union = new ItemsSketch[T](8)
-    union.merge(sketch)
-    union.merge(input)
-    union
-  }
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(
+        BooleanType,
+        ByteType,
+        ShortType,
+        IntegerType,
+        LongType,
+        DecimalType,
+        FloatType,
+        DoubleType,
+        DateType,
+        TimestampType,
+        StringTypeWithCollation(supportsTrimCollation = true)),
+      IntegerType)
+
+  override def merge(sketch: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
+    sketch.merge(input)
 
   override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](8)
 
-  override def serialize(sketch: ItemsSketch[T]): Array[Byte] = {
-    left.dataType match {
-      case _: IntegerType =>
-        sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType =>
-        sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType =>
-        sketch.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType =>
-        sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case dataType => throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3263",
-        messageParameters = Map("dataType" -> dataType.toString))
-    }
+  override def serialize(sketch: ItemsSketch[T]): Array[Byte] = left.dataType match {
+    case _: BooleanType =>
+      sketch.toByteArray(new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: ByteType | _: ShortType | _: IntegerType |
+         _: FloatType | _: DateType =>
+      sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: LongType | _: TimestampType =>
+      sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DoubleType =>
+      sketch.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: StringType =>
+      sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+//    case _: DecimalType =>
+//      sketch.toByteArray(new ArrayOfDecimalsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
   }
 
-  override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = {
-    left.dataType match {
-      case _: IntegerType => ItemsSketch.getInstance(
-        Memory.wrap(buffer),
-        new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType => ItemsSketch.getInstance(
-        Memory.wrap(buffer),
-        new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType => ItemsSketch.getInstance(
-        Memory.wrap(buffer),
-        new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType => ItemsSketch.getInstance(
-        Memory.wrap(buffer),
-        new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case dataType => throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3263",
-        messageParameters = Map("dataType" -> dataType.toString))
-    }
+  override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = left.dataType match {
+    case _: BooleanType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: ByteType | _: ShortType | _: IntegerType |
+         _: FloatType | _: DateType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: LongType | _: TimestampType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DoubleType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: StringType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+//    case _: DecimalType =>
+//      ItemsSketch.getInstance(
+//        Memory.wrap(buffer), new ArrayOfDecimalsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
   }
 
   override def dataType: DataType = {
-    val resultEntryType = left.dataType match {
-      case _: LongType | _: DoubleType | _: IntegerType | _: StringType =>
-        StructType(
-          StructField("Item", left.dataType, nullable = false) ::
-            StructField("Estimate", LongType, nullable = false) :: Nil
-        )
-      case dataType => throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3263",
-        messageParameters = Map("dataType" -> dataType.toString))
-    }
+    val resultEntryType = StructType(
+      StructField("Item", left.dataType, nullable = false) ::
+        StructField("Estimate", LongType, nullable = false) :: Nil
+    )
     ArrayType(resultEntryType, containsNull = false)
   }
 }
@@ -468,53 +517,49 @@ case class ApproxTopK(
                        mutableAggBufferOffset: Int = 0,
                        inputAggBufferOffset: Int = 0)
   extends AbsApproxTopK[Any]
-    with BinaryLike[Expression]
-    with ExpectsInputTypes {
+    with BinaryLike[Expression] {
 
   def this(child: Expression, topK: Expression) = this(child, topK, 0, 0)
 
   def this(child: Expression, topK: Int) = this(child, Literal(topK), 0, 0)
 
+  def this(child: Expression) = this(child, Literal(5), 0, 0)
+
   override def prettyName: String = "approx_top_k"
 
   override def nullable: Boolean = false
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(
-        IntegerType,
-        LongType,
-        DoubleType,
-        StringTypeWithCollation(supportsTrimCollation = true)),
-      IntegerType)
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopK = {
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopK =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-  }
 
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ApproxTopK = {
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ApproxTopK =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-  }
 
-  override protected def withNewChildrenInternal(
-                                                  newLeft: Expression,
-                                                  newRight: Expression): ApproxTopK = {
-    copy(left = newLeft, right = newRight)
-  }
+  override protected def withNewChildrenInternal(newLeft: Expression,
+                                                 newRight: Expression):
+  ApproxTopK = copy(left = newLeft, right = newRight)
 
   override def update(sketch: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
     val v = left.eval(input)
     if (v != null) {
+      // scalastyle:off
+      println(left.dataType)
+      println(v.getClass)
+      // scalastyle:on
       left.dataType match {
+        case _: BooleanType => sketch.update(v.asInstanceOf[Boolean])
+        case _: ByteType => sketch.update(v.asInstanceOf[Byte])
+        case _: ShortType => sketch.update(v.asInstanceOf[Short])
         case _: IntegerType => sketch.update(v.asInstanceOf[Int])
         case _: LongType => sketch.update(v.asInstanceOf[Long])
+        case _: FloatType => sketch.update(v.asInstanceOf[Float])
         case _: DoubleType => sketch.update(v.asInstanceOf[Double])
+        case _: DateType => sketch.update(v.asInstanceOf[Int])
+        case _: TimestampType => sketch.update(v.asInstanceOf[Long])
         case st: StringType =>
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           sketch.update(cKey.toString)
-        case dataType => throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3263",
-          messageParameters = Map("dataType" -> dataType.toString))
+        case _: DecimalType => sketch.update(v.asInstanceOf[Decimal])
       }
     }
     sketch
@@ -528,14 +573,12 @@ case class ApproxTopK(
     for (i <- 0 until resultLength) {
       val row = items(i)
       left.dataType match {
-        case _: LongType | _: DoubleType | _: IntegerType =>
+        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
+             _: DecimalType | _: FloatType | _: DoubleType | _: DateType | _: TimestampType =>
           result(i) = InternalRow.apply(row.getItem, row.getEstimate)
         case _: StringType =>
           val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
           result(i) = InternalRow.apply(item, row.getEstimate)
-        case dataType => throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3263",
-          messageParameters = Map("dataType" -> dataType.toString))
       }
     }
     new GenericArrayData(result)
