@@ -396,45 +396,6 @@ case class HllUnionAgg(
   }
 }
 
-// case class ArrayOfDecimalsSerDe() extends ArrayOfItemsSerDe[BigDecimal] {
-//  private val stringsSerDe = new ArrayOfStringsSerDe()
-//
-//  override def serializeToByteArray(item: BigDecimal): Array[Byte] = {
-//    Objects.requireNonNull(item, "Items must not be null")
-//    stringsSerDe.serializeToByteArray(item.toString())
-//  }
-//
-//  override def serializeToByteArray(items: Array[BigDecimal]): Array[Byte] = {
-//    Objects.requireNonNull(items, "Items must not be null")
-//    stringsSerDe.serializeToByteArray(items.map(_.toString()))
-//  }
-//
-//  override def deserializeFromMemory(mem: Memory, offsetBytes: Long, numItems: Int):
-//  Array[BigDecimal] = {
-//    val strings = stringsSerDe.deserializeFromMemory(mem, offsetBytes, numItems)
-//    strings.map(BigDecimal(_))
-//  }
-//
-//  override def sizeOf(item: BigDecimal): Int = {
-//    Objects.requireNonNull(item, "Items must not be null")
-//    val bigDecimalString = item.toString()
-//    if (bigDecimalString.isEmpty) Integer.BYTES
-//    bigDecimalString.getBytes(StandardCharsets.UTF_8).length + Integer.BYTES
-//  }
-//
-//  override def sizeOf(mem: Memory, offsetBytes: Long, numItems: Int): Int = {
-//    stringsSerDe.sizeOf(mem, offsetBytes, numItems)
-//  }
-//
-//  override def toString(item: BigDecimal): String = {
-//    if (item == null) return "null"
-//    item.toString()
-//  }
-//
-//  override def getClassOfT: Class[BigDecimal] = classOf[BigDecimal]
-// }
-
-
 /**
  * Abstract class for ApproxTopK
  */
@@ -476,8 +437,8 @@ abstract class AbsApproxTopK[T]
       sketch.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
     case _: StringType =>
       sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-//    case _: DecimalType =>
-//      sketch.toByteArray(new ArrayOfDecimalsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DecimalType =>
+      sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
   }
 
   override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = left.dataType match {
@@ -497,9 +458,9 @@ abstract class AbsApproxTopK[T]
     case _: StringType =>
       ItemsSketch.getInstance(
         Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-//    case _: DecimalType =>
-//      ItemsSketch.getInstance(
-//        Memory.wrap(buffer), new ArrayOfDecimalsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case _: DecimalType =>
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
   }
 
   override def dataType: DataType = {
@@ -542,10 +503,6 @@ case class ApproxTopK(
   override def update(sketch: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
     val v = left.eval(input)
     if (v != null) {
-      // scalastyle:off
-      println(left.dataType)
-      println(v.getClass)
-      // scalastyle:on
       left.dataType match {
         case _: BooleanType => sketch.update(v.asInstanceOf[Boolean])
         case _: ByteType => sketch.update(v.asInstanceOf[Byte])
@@ -559,7 +516,11 @@ case class ApproxTopK(
         case st: StringType =>
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           sketch.update(cKey.toString)
-        case _: DecimalType => sketch.update(v.asInstanceOf[Decimal])
+        case _: DecimalType =>
+          val decimalString = v.asInstanceOf[Decimal].toString
+          val decimalUTF8String = UTF8String.fromString(decimalString)
+          val cKey = CollationFactory.getCollationKey(decimalUTF8String, StringType.collationId)
+          sketch.update(cKey.toString)
       }
     }
     sketch
@@ -574,11 +535,15 @@ case class ApproxTopK(
       val row = items(i)
       left.dataType match {
         case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
-             _: DecimalType | _: FloatType | _: DoubleType | _: DateType | _: TimestampType =>
+             _: FloatType | _: DoubleType | _: DateType | _: TimestampType =>
           result(i) = InternalRow.apply(row.getItem, row.getEstimate)
         case _: StringType =>
           val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
           result(i) = InternalRow.apply(item, row.getEstimate)
+        case _: DecimalType =>
+          val decimalString = row.getItem.asInstanceOf[String]
+          val decimalItem = Decimal(decimalString)
+          result(i) = InternalRow.apply(decimalItem, row.getEstimate)
       }
     }
     new GenericArrayData(result)

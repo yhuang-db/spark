@@ -1881,7 +1881,10 @@ class DataFrameAggregateSuite extends QueryTest
       "SELECT approx_top_k(expr, 2)" +
         "FROM VALUES (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0), (4.0) AS tab(expr);"
     )
-    checkAnswer(res5, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
+    // scalastyle: off
+    res5.show(truncate = false)
+    // scalastyle: on
+    checkAnswer(res5, Row(Seq(Row(Decimal(1.0, 2, 1), 2), Row(Decimal(0.0, 2, 1), 2))))
   }
 
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
