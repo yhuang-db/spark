@@ -1783,43 +1783,46 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-xxxxx: DataSketches-based approx top-k tests") {
-    // Same test as in https://docs.databricks.com/aws/en/sql/language-manual/functions/approx_top_k
-    // Integer
-    val res1 = sql(
-      "SELECT approx_top_k(expr, 5) " +
-        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
-    )
-    checkAnswer(res1, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
-
     // String
-    val res2 = sql(
+    val res1 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    checkAnswer(res2, Row(Seq(Row("c", 4), Row("d", 2))))
+    checkAnswer(res1, Row(Seq(Row("c", 4), Row("d", 2))))
 
-    // Long
+    // Boolean
+    val dfBool = Seq(true, true, false, true, true, false, false).toDF("expr")
+    dfBool.createOrReplaceTempView("t_bool")
+    val res2 = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
+    checkAnswer(res2, Row(Seq(Row(true, 4))))
+
+    // Byte
     val res3 = sql(
       "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast(0 AS LONG), cast(0 AS LONG), cast(1 AS LONG), cast(1 AS LONG), " +
-        "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);"
+        "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), cast(1 AS BYTE), " +
+        "cast(2 AS BYTE), cast(3 AS BYTE), cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);"
     )
     checkAnswer(res3, Row(Seq(Row(0, 2), Row(4, 2))))
 
-    // Double
+    // Integer
     val res4 = sql(
-      "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast(0.0 AS DOUBLE), cast(0.0 AS DOUBLE), " +
-        "cast(1.0 AS DOUBLE), cast(1.0 AS DOUBLE), " +
-        "cast(2.0 AS DOUBLE), cast(3.0 AS DOUBLE), " +
-        "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);"
+      "SELECT approx_top_k(expr, 5) " +
+        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
     )
-    checkAnswer(res4, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
+    checkAnswer(res4, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
 
     // Short
-    val res6 = sql(
+    val res5 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS SHORT), cast(0 AS SHORT), cast(1 AS SHORT), cast(1 AS SHORT), " +
         "cast(2 AS SHORT), cast(3 AS SHORT), cast(4 AS SHORT), cast(4 AS SHORT) AS tab(expr);"
+    )
+    checkAnswer(res5, Row(Seq(Row(0, 2), Row(4, 2))))
+
+    // Long
+    val res6 = sql(
+      "SELECT approx_top_k(expr, 2) " +
+        "FROM VALUES cast(0 AS LONG), cast(0 AS LONG), cast(1 AS LONG), cast(1 AS LONG), " +
+        "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);"
     )
     checkAnswer(res6, Row(Seq(Row(0, 2), Row(4, 2))))
 
@@ -1833,22 +1836,18 @@ class DataFrameAggregateSuite extends QueryTest
     )
     checkAnswer(res7, Row(Seq(Row(0.0, 2), Row(1.0, 2), Row(4.0, 2), Row(2.0, 1), Row(3.0, 1))))
 
-    // Boolean
-    val dfBool = Seq(true, true, false, true, true, false, false).toDF("expr")
-    dfBool.createOrReplaceTempView("t_bool")
-    val res8 = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
-    checkAnswer(res8, Row(Seq(Row(true, 4))))
-
-    // Byte
-    val res9 = sql(
+    // Double
+    val res8 = sql(
       "SELECT approx_top_k(expr, 2) " +
-        "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), cast(1 AS BYTE), " +
-        "cast(2 AS BYTE), cast(3 AS BYTE), cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);"
+        "FROM VALUES cast(0.0 AS DOUBLE), cast(0.0 AS DOUBLE), " +
+        "cast(1.0 AS DOUBLE), cast(1.0 AS DOUBLE), " +
+        "cast(2.0 AS DOUBLE), cast(3.0 AS DOUBLE), " +
+        "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);"
     )
-    checkAnswer(res9, Row(Seq(Row(0, 2), Row(4, 2))))
+    checkAnswer(res8, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
 
     // Date
-    val res10 = sql(
+    val res9 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast('2023-01-01' AS DATE), cast('2023-01-01' AS DATE), " +
         "cast('2023-01-02' AS DATE), cast('2023-01-02' AS DATE), " +
@@ -1856,11 +1855,11 @@ class DataFrameAggregateSuite extends QueryTest
         "cast('2023-01-05' AS DATE), cast('2023-01-05' AS DATE) AS tab(expr);"
     )
     checkAnswer(
-      res10,
+      res9,
       Row(Seq(Row(Date.valueOf("2023-01-02"), 2), Row(Date.valueOf("2023-01-01"), 2))))
 
     // Timestamp
-    val res11 = sql(
+    val res10 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast('2023-01-01 00:00:00' AS TIMESTAMP), " +
         "cast('2023-01-01 00:00:00' AS TIMESTAMP), " +
@@ -1872,19 +1871,18 @@ class DataFrameAggregateSuite extends QueryTest
         "cast('2023-01-05 00:00:00' AS TIMESTAMP) AS tab(expr);"
     )
     checkAnswer(
-      res11,
+      res10,
       Row(Seq(Row(Timestamp.valueOf("2023-01-02 00:00:00"), 2),
         Row(Timestamp.valueOf("2023-01-05 00:00:00"), 2))))
 
     // Decimal
-    val res5 = sql(
-      "SELECT approx_top_k(expr, 2)" +
+    val res11 = sql(
+      "SELECT approx_top_k(expr, 2) AS top_k_result " +
         "FROM VALUES (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0), (4.0) AS tab(expr);"
     )
-    // scalastyle: off
-    res5.show(truncate = false)
-    // scalastyle: on
-    checkAnswer(res5, Row(Seq(Row(Decimal(1.0, 2, 1), 2), Row(Decimal(0.0, 2, 1), 2))))
+    checkAnswer(
+      res11.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
+      Row(Seq(Row(1.0, 2), Row(0.0, 2))))
   }
 
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
