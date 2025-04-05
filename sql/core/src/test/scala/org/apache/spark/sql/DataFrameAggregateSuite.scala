@@ -1882,7 +1882,41 @@ class DataFrameAggregateSuite extends QueryTest
     )
     checkAnswer(
       res11.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
-      Row(Seq(Row(1.0, 2), Row(0.0, 2))))
+      Row(Seq(Row(0.0, 2), Row(1.0, 2))))
+
+    // Decimal
+    val res12 = sql(
+      "SELECT approx_top_k(expr, 2) AS top_k_result " +
+        "FROM VALUES " +
+        "CAST(0.0 AS DECIMAL(10, 2)), " +
+        "CAST(0.0 AS DECIMAL(10, 2)), " +
+        "CAST(1.0 AS DECIMAL(10, 2)), " +
+        "CAST(1.0 AS DECIMAL(10, 2)), " +
+        "CAST(2.0 AS DECIMAL(10, 2)), " +
+        "CAST(3.0 AS DECIMAL(10, 2)), " +
+        "CAST(4.0 AS DECIMAL(10, 2)), " +
+        "CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);"
+    )
+    checkAnswer(
+      res12.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
+      Row(Seq(Row(0.0, 2), Row(1.0, 2))))
+
+    // Decimal
+    val res13 = sql(
+      "SELECT approx_top_k(expr, 2) AS top_k_result " +
+        "FROM VALUES " +
+        "CAST(0.0 AS DECIMAL(20, 1)), " +
+        "CAST(0.0 AS DECIMAL(20, 1)), " +
+        "CAST(1.0 AS DECIMAL(20, 1)), " +
+        "CAST(1.0 AS DECIMAL(20, 1)), " +
+        "CAST(2.0 AS DECIMAL(20, 1)), " +
+        "CAST(3.0 AS DECIMAL(20, 1)), " +
+        "CAST(4.0 AS DECIMAL(20, 1)), " +
+        "CAST(4.0 AS DECIMAL(20, 1)) AS tab(expr);"
+    )
+    checkAnswer(
+      res13.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
+      Row(Seq(Row(0.0, 2), Row(4.0, 2))))
   }
 
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {

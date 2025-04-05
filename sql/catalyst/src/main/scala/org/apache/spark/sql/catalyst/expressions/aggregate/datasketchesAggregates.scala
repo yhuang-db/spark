@@ -24,7 +24,7 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalByteArrSerDe, ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -428,8 +428,7 @@ abstract class AbsApproxTopK[T]
   override def serialize(sketch: ItemsSketch[T]): Array[Byte] = left.dataType match {
     case _: BooleanType =>
       sketch.toByteArray(new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: ByteType | _: ShortType | _: IntegerType |
-         _: FloatType | _: DateType =>
+    case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
       sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
     case _: LongType | _: TimestampType =>
       sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
@@ -437,16 +436,24 @@ abstract class AbsApproxTopK[T]
       sketch.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
     case _: StringType =>
       sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: DecimalType =>
-      sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case dt: DecimalType =>
+      val precision = dt.precision
+      if (precision <= Decimal.MAX_INT_DIGITS) {
+        sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      } else if (precision <= Decimal.MAX_LONG_DIGITS) {
+        sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      }
+      else {
+        sketch.toByteArray(
+          new ArrayOfDecimalByteArrSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
+      }
   }
 
   override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = left.dataType match {
     case _: BooleanType =>
       ItemsSketch.getInstance(
         Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: ByteType | _: ShortType | _: IntegerType |
-         _: FloatType | _: DateType =>
+    case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
       ItemsSketch.getInstance(
         Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
     case _: LongType | _: TimestampType =>
@@ -458,9 +465,21 @@ abstract class AbsApproxTopK[T]
     case _: StringType =>
       ItemsSketch.getInstance(
         Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: DecimalType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+    case dt: DecimalType =>
+      val precision = dt.precision
+      if (precision <= Decimal.MAX_INT_DIGITS) {
+        ItemsSketch.getInstance(
+          Memory.wrap(buffer),
+          new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      } else if (precision <= Decimal.MAX_LONG_DIGITS) {
+        ItemsSketch.getInstance(
+          Memory.wrap(buffer),
+          new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
+      } else {
+        ItemsSketch.getInstance(
+          Memory.wrap(buffer),
+          new ArrayOfDecimalByteArrSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
+      }
   }
 
   override def dataType: DataType = {
@@ -516,11 +535,14 @@ case class ApproxTopK(
         case st: StringType =>
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           sketch.update(cKey.toString)
-        case _: DecimalType =>
-          val decimalString = v.asInstanceOf[Decimal].toString
-          val decimalUTF8String = UTF8String.fromString(decimalString)
-          val cKey = CollationFactory.getCollationKey(decimalUTF8String, StringType.collationId)
-          sketch.update(cKey.toString)
+        case dt: DecimalType =>
+          if (dt.precision <= Decimal.MAX_INT_DIGITS) {
+            sketch.update(v.asInstanceOf[Decimal].toUnscaledLong.toInt)
+          } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+            sketch.update(v.asInstanceOf[Decimal].toUnscaledLong)
+          } else {
+            sketch.update(v.asInstanceOf[Decimal])
+          }
       }
     }
     sketch
@@ -540,10 +562,18 @@ case class ApproxTopK(
         case _: StringType =>
           val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
           result(i) = InternalRow.apply(item, row.getEstimate)
-        case _: DecimalType =>
-          val decimalString = row.getItem.asInstanceOf[String]
-          val decimalItem = Decimal(decimalString)
-          result(i) = InternalRow.apply(decimalItem, row.getEstimate)
+        case dt: DecimalType =>
+          if (dt.precision <= Decimal.MAX_INT_DIGITS) {
+            val intItem = row.getItem.asInstanceOf[Int]
+            val decimalItem = Decimal.createUnsafe(intItem, dt.precision, dt.scale)
+            result(i) = InternalRow.apply(decimalItem, row.getEstimate)
+          } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
+            val longItem = row.getItem.asInstanceOf[Long]
+            val decimalItem = Decimal.createUnsafe(longItem, dt.precision, dt.scale)
+            result(i) = InternalRow.apply(decimalItem, row.getEstimate)
+          } else {
+            result(i) = InternalRow.apply(row.getItem, row.getEstimate)
+          }
       }
     }
     new GenericArrayData(result)
