@@ -442,8 +442,7 @@ abstract class AbsApproxTopK[T]
         sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
       } else if (precision <= Decimal.MAX_LONG_DIGITS) {
         sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      }
-      else {
+      } else {
         sketch.toByteArray(
           new ArrayOfDecimalByteArrSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
       }
