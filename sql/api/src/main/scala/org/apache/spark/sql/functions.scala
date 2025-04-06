@@ -664,6 +664,12 @@ object functions {
   def approx_top_k(columnName: String, k: Int): Column =
     approx_top_k(Column(columnName), k)
 
+  def approx_top_k(e: Column): Column =
+    Column.fn("approx_top_k", e)
+
+  def approx_top_k(columnName: String): Column =
+    approx_top_k(Column(columnName))
+
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
    * configured with lgConfigK arg.
