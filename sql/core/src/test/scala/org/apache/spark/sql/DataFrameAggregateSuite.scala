@@ -1783,9 +1783,15 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-xxxxx: DataSketches-based approx top-k tests") {
+    // Integer
+    val res4 = sql(
+      "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
+    )
+    checkAnswer(res4, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
+
     // String
     val res1 = sql(
-      "SELECT approx_top_k(expr, 2) " +
+      "SELECT approx_top_k(expr, 2)" +
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
     checkAnswer(res1, Row(Seq(Row("c", 4), Row("d", 2))))
 
@@ -1799,41 +1805,30 @@ class DataFrameAggregateSuite extends QueryTest
     val res3 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), cast(1 AS BYTE), " +
-        "cast(2 AS BYTE), cast(3 AS BYTE), cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);"
-    )
+        "cast(2 AS BYTE), cast(3 AS BYTE), cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);")
     checkAnswer(res3, Row(Seq(Row(0, 2), Row(4, 2))))
-
-    // Integer
-    val res4 = sql(
-      "SELECT approx_top_k(expr, 5) " +
-        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
-    )
-    checkAnswer(res4, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
 
     // Short
     val res5 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS SHORT), cast(0 AS SHORT), cast(1 AS SHORT), cast(1 AS SHORT), " +
-        "cast(2 AS SHORT), cast(3 AS SHORT), cast(4 AS SHORT), cast(4 AS SHORT) AS tab(expr);"
-    )
+        "cast(2 AS SHORT), cast(3 AS SHORT), cast(4 AS SHORT), cast(4 AS SHORT) AS tab(expr);")
     checkAnswer(res5, Row(Seq(Row(0, 2), Row(4, 2))))
 
     // Long
     val res6 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS LONG), cast(0 AS LONG), cast(1 AS LONG), cast(1 AS LONG), " +
-        "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);"
-    )
+        "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);")
     checkAnswer(res6, Row(Seq(Row(0, 2), Row(4, 2))))
 
     // Float
     val res7 = sql(
-      "SELECT approx_top_k(expr, 5) " +
+      "SELECT approx_top_k(expr) " +
         "FROM VALUES cast(0.0 AS FLOAT), cast(0.0 AS FLOAT), " +
         "cast(1.0 AS FLOAT), cast(1.0 AS FLOAT), " +
         "cast(2.0 AS FLOAT), cast(3.0 AS FLOAT), " +
-        "cast(4.0 AS FLOAT), cast(4.0 AS FLOAT) AS tab(expr);"
-    )
+        "cast(4.0 AS FLOAT), cast(4.0 AS FLOAT) AS tab(expr);")
     checkAnswer(res7, Row(Seq(Row(0.0, 2), Row(1.0, 2), Row(4.0, 2), Row(2.0, 1), Row(3.0, 1))))
 
     // Double
@@ -1842,8 +1837,7 @@ class DataFrameAggregateSuite extends QueryTest
         "FROM VALUES cast(0.0 AS DOUBLE), cast(0.0 AS DOUBLE), " +
         "cast(1.0 AS DOUBLE), cast(1.0 AS DOUBLE), " +
         "cast(2.0 AS DOUBLE), cast(3.0 AS DOUBLE), " +
-        "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);"
-    )
+        "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);")
     checkAnswer(res8, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
 
     // Date
@@ -1852,8 +1846,7 @@ class DataFrameAggregateSuite extends QueryTest
         "FROM VALUES cast('2023-01-01' AS DATE), cast('2023-01-01' AS DATE), " +
         "cast('2023-01-02' AS DATE), cast('2023-01-02' AS DATE), " +
         "cast('2023-01-03' AS DATE), cast('2023-01-04' AS DATE), " +
-        "cast('2023-01-05' AS DATE), cast('2023-01-05' AS DATE) AS tab(expr);"
-    )
+        "cast('2023-01-05' AS DATE), cast('2023-01-05' AS DATE) AS tab(expr);")
     checkAnswer(
       res9,
       Row(Seq(Row(Date.valueOf("2023-01-02"), 2), Row(Date.valueOf("2023-01-01"), 2))))
@@ -1868,8 +1861,7 @@ class DataFrameAggregateSuite extends QueryTest
         "cast('2023-01-03 00:00:00' AS TIMESTAMP), " +
         "cast('2023-01-04 00:00:00' AS TIMESTAMP), " +
         "cast('2023-01-05 00:00:00' AS TIMESTAMP), " +
-        "cast('2023-01-05 00:00:00' AS TIMESTAMP) AS tab(expr);"
-    )
+        "cast('2023-01-05 00:00:00' AS TIMESTAMP) AS tab(expr);")
     checkAnswer(
       res10,
       Row(Seq(Row(Timestamp.valueOf("2023-01-02 00:00:00"), 2),
@@ -1878,8 +1870,7 @@ class DataFrameAggregateSuite extends QueryTest
     // Decimal
     val res11 = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0), (4.0) AS tab(expr);"
-    )
+        "FROM VALUES (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0), (4.0) AS tab(expr);")
     checkAnswer(
       res11.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
       Row(Seq(Row(0.0, 2), Row(1.0, 2))))
@@ -1887,16 +1878,10 @@ class DataFrameAggregateSuite extends QueryTest
     // Decimal
     val res12 = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES " +
-        "CAST(0.0 AS DECIMAL(10, 2)), " +
-        "CAST(0.0 AS DECIMAL(10, 2)), " +
-        "CAST(1.0 AS DECIMAL(10, 2)), " +
-        "CAST(1.0 AS DECIMAL(10, 2)), " +
-        "CAST(2.0 AS DECIMAL(10, 2)), " +
-        "CAST(3.0 AS DECIMAL(10, 2)), " +
-        "CAST(4.0 AS DECIMAL(10, 2)), " +
-        "CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);"
-    )
+        "FROM VALUES CAST(0.0 AS DECIMAL(10, 2)), CAST(0.0 AS DECIMAL(10, 2)), " +
+        "CAST(1.0 AS DECIMAL(10, 2)), CAST(1.0 AS DECIMAL(10, 2)), " +
+        "CAST(2.0 AS DECIMAL(10, 2)), CAST(3.0 AS DECIMAL(10, 2)), " +
+        "CAST(4.0 AS DECIMAL(10, 2)), CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);")
     checkAnswer(
       res12.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
       Row(Seq(Row(0.0, 2), Row(1.0, 2))))
@@ -1904,16 +1889,10 @@ class DataFrameAggregateSuite extends QueryTest
     // Decimal
     val res13 = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
-        "FROM VALUES " +
-        "CAST(0.0 AS DECIMAL(20, 1)), " +
-        "CAST(0.0 AS DECIMAL(20, 1)), " +
-        "CAST(1.0 AS DECIMAL(20, 1)), " +
-        "CAST(1.0 AS DECIMAL(20, 1)), " +
-        "CAST(2.0 AS DECIMAL(20, 1)), " +
-        "CAST(3.0 AS DECIMAL(20, 1)), " +
-        "CAST(4.0 AS DECIMAL(20, 1)), " +
-        "CAST(4.0 AS DECIMAL(20, 1)) AS tab(expr);"
-    )
+        "FROM VALUES CAST(0.0 AS DECIMAL(20, 1)), CAST(0.0 AS DECIMAL(20, 1)), " +
+        "CAST(1.0 AS DECIMAL(20, 1)), CAST(1.0 AS DECIMAL(20, 1)), " +
+        "CAST(2.0 AS DECIMAL(20, 1)), CAST(3.0 AS DECIMAL(20, 1)), " +
+        "CAST(4.0 AS DECIMAL(20, 1)), CAST(4.0 AS DECIMAL(20, 1)) AS tab(expr);")
     checkAnswer(
       res13.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
       Row(Seq(Row(0.0, 2), Row(4.0, 2))))
