@@ -1784,29 +1784,29 @@ class DataFrameAggregateSuite extends QueryTest
 
   test("SPARK-xxxxx: DataSketches-based approx top-k tests") {
     // Integer
-    val res4 = sql(
+    val res1 = sql(
       "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
     )
-    checkAnswer(res4, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
+    checkAnswer(res1, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
 
     // String
-    val res1 = sql(
+    val res2 = sql(
       "SELECT approx_top_k(expr, 2)" +
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    checkAnswer(res1, Row(Seq(Row("c", 4), Row("d", 2))))
+    checkAnswer(res2, Row(Seq(Row("c", 4), Row("d", 2))))
 
     // Boolean
     val dfBool = Seq(true, true, false, true, true, false, false).toDF("expr")
     dfBool.createOrReplaceTempView("t_bool")
-    val res2 = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
-    checkAnswer(res2, Row(Seq(Row(true, 4))))
+    val res3 = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
+    checkAnswer(res3, Row(Seq(Row(true, 4))))
 
     // Byte
-    val res3 = sql(
+    val res4 = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), cast(1 AS BYTE), " +
         "cast(2 AS BYTE), cast(3 AS BYTE), cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);")
-    checkAnswer(res3, Row(Seq(Row(0, 2), Row(4, 2))))
+    checkAnswer(res4, Row(Seq(Row(0, 2), Row(4, 2))))
 
     // Short
     val res5 = sql(
