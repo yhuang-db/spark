@@ -1782,6 +1782,27 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(Array(1), Array(1)))
   }
 
+  test("SPARK-debug: DataSketches-based approx top-k tests") {
+    // scalastyle: off
+    val res1 = sql(
+      "SELECT ter_approx_top_k(expr) " +
+        "FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
+    )
+    res1.show(truncate = false)
+
+//    val res2 = sql(
+//      "SELECT ter_approx_top_k(expr, 2)" +
+//        "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
+//    res2.show(truncate = false)
+//
+//    val res3 = sql(
+//      "SELECT ter_approx_top_k(expr, 10, 100) " +
+//        "FROM VALUES (0), (1), (1), (2), (2), (2) AS tab(expr);"
+//    )
+//    res3.show(truncate = false)
+    // scalastyle: on
+  }
+
   test("SPARK-xxxxx: DataSketches-based approx top-k tests") {
     // Integer
     val res1 = sql(

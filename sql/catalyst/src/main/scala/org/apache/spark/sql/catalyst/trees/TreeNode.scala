@@ -338,6 +338,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   final def withNewChildren(newChildren: Seq[BaseType]): BaseType = {
     val childrenIndexedSeq = asIndexedSeq(children)
     val newChildrenIndexedSeq = asIndexedSeq(newChildren)
+    if (newChildrenIndexedSeq.size != childrenIndexedSeq.size) {
+      // scalastyle:off
+      println("newChildrenIndexedSeq.size: " + newChildrenIndexedSeq.size)
+      println("childrenIndexedSeq.size: " + childrenIndexedSeq.size)
+      println("newChildren: " + newChildren.toString())
+      println("children: " + children.toString())
+      println(this.treeString)
+      println(this.toString)
+      // scalastyle:on
+    }
     assert(newChildrenIndexedSeq.size == childrenIndexedSeq.size, "Incorrect number of children")
     if (childrenIndexedSeq.isEmpty ||
         childrenFastEquals(newChildrenIndexedSeq, childrenIndexedSeq)) {
