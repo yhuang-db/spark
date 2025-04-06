@@ -9374,11 +9374,6 @@
       "Doesn't support month or year interval: <interval>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3263" : {
-    "message" : [
-      "An ItemsSketch instance cannot be updates with a Spark <dataType> type"
-    ]
-  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
