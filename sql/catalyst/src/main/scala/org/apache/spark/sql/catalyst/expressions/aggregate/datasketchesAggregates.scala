@@ -402,190 +402,6 @@ case class HllUnionAgg(
 abstract class AbsApproxTopK[T]
   extends TypedImperativeAggregate[ItemsSketch[T]]
     with ExpectsInputTypes {
-  val left: Expression
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(
-        BooleanType,
-        ByteType,
-        ShortType,
-        IntegerType,
-        LongType,
-        DecimalType,
-        FloatType,
-        DoubleType,
-        DateType,
-        TimestampType,
-        StringTypeWithCollation(supportsTrimCollation = true)),
-      IntegerType)
-
-  override def merge(sketch: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
-    sketch.merge(input)
-
-  override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](8)
-
-  override def serialize(sketch: ItemsSketch[T]): Array[Byte] = left.dataType match {
-    case _: BooleanType =>
-      sketch.toByteArray(new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-      sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: LongType | _: TimestampType =>
-      sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: DoubleType =>
-      sketch.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: StringType =>
-      sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case dt: DecimalType =>
-      val precision = dt.precision
-      if (precision <= Decimal.MAX_INT_DIGITS) {
-        sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else if (precision <= Decimal.MAX_LONG_DIGITS) {
-        sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else {
-        sketch.toByteArray(
-          new ArrayOfDecimalByteArrSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-      }
-  }
-
-  override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = left.dataType match {
-    case _: BooleanType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: LongType | _: TimestampType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: DoubleType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: StringType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case dt: DecimalType =>
-      val precision = dt.precision
-      if (precision <= Decimal.MAX_INT_DIGITS) {
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else if (precision <= Decimal.MAX_LONG_DIGITS) {
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else {
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfDecimalByteArrSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-      }
-  }
-
-  override def dataType: DataType = {
-    val resultEntryType = StructType(
-      StructField("Item", left.dataType, nullable = false) ::
-        StructField("Estimate", LongType, nullable = false) :: Nil
-    )
-    ArrayType(resultEntryType, containsNull = false)
-  }
-}
-
-case class ApproxTopK(
-                       left: Expression,
-                       right: Expression,
-                       mutableAggBufferOffset: Int = 0,
-                       inputAggBufferOffset: Int = 0)
-  extends AbsApproxTopK[Any]
-    with BinaryLike[Expression] {
-
-  def this(child: Expression, topK: Expression) = this(child, topK, 0, 0)
-
-  def this(child: Expression, topK: Int) = this(child, Literal(topK), 0, 0)
-
-  def this(child: Expression) = this(child, Literal(5), 0, 0)
-
-  override def prettyName: String = "approx_top_k"
-
-  override def nullable: Boolean = false
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopK =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ApproxTopK =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override protected def withNewChildrenInternal(newLeft: Expression,
-                                                 newRight: Expression): ApproxTopK =
-    copy(left = newLeft, right = newRight)
-
-  override def update(sketch: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
-    val v = left.eval(input)
-    if (v != null) {
-      left.dataType match {
-        case _: BooleanType => sketch.update(v.asInstanceOf[Boolean])
-        case _: ByteType => sketch.update(v.asInstanceOf[Byte])
-        case _: ShortType => sketch.update(v.asInstanceOf[Short])
-        case _: IntegerType => sketch.update(v.asInstanceOf[Int])
-        case _: LongType => sketch.update(v.asInstanceOf[Long])
-        case _: FloatType => sketch.update(v.asInstanceOf[Float])
-        case _: DoubleType => sketch.update(v.asInstanceOf[Double])
-        case _: DateType => sketch.update(v.asInstanceOf[Int])
-        case _: TimestampType => sketch.update(v.asInstanceOf[Long])
-        case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          sketch.update(cKey.toString)
-        case dt: DecimalType =>
-          if (dt.precision <= Decimal.MAX_INT_DIGITS) {
-            sketch.update(v.asInstanceOf[Decimal].toUnscaledLong.toInt)
-          } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-            sketch.update(v.asInstanceOf[Decimal].toUnscaledLong)
-          } else {
-            sketch.update(v.asInstanceOf[Decimal])
-          }
-      }
-    }
-    sketch
-  }
-
-  override def eval(sketch: ItemsSketch[Any]): Any = {
-    val topK = right.eval().asInstanceOf[Int]
-    val items = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
-    val resultLength = math.min(items.length, topK)
-    val result = new Array[AnyRef](resultLength)
-    for (i <- 0 until resultLength) {
-      val row = items(i)
-      left.dataType match {
-        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
-             _: FloatType | _: DoubleType | _: DateType | _: TimestampType =>
-          result(i) = InternalRow.apply(row.getItem, row.getEstimate)
-        case _: StringType =>
-          val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
-          result(i) = InternalRow.apply(item, row.getEstimate)
-        case dt: DecimalType =>
-          if (dt.precision <= Decimal.MAX_INT_DIGITS) {
-            val intItem = row.getItem.asInstanceOf[Int]
-            val decimalItem = Decimal.createUnsafe(intItem, dt.precision, dt.scale)
-            result(i) = InternalRow.apply(decimalItem, row.getEstimate)
-          } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-            val longItem = row.getItem.asInstanceOf[Long]
-            val decimalItem = Decimal.createUnsafe(longItem, dt.precision, dt.scale)
-            result(i) = InternalRow.apply(decimalItem, row.getEstimate)
-          } else {
-            result(i) = InternalRow.apply(row.getItem, row.getEstimate)
-          }
-      }
-    }
-    new GenericArrayData(result)
-  }
-}
-
-
-/**
- * Abstract class
- */
-abstract class TerAbsApproxTopK[T]
-  extends TypedImperativeAggregate[ItemsSketch[T]]
-    with ExpectsInputTypes {
 
   val first: Expression
   val second: Expression
@@ -597,10 +413,6 @@ abstract class TerAbsApproxTopK[T]
     val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
     // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
     val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-    // scalastyle:off
-    println("maxItemsTracked: ", maxItemsTracked)
-    println("maxMapSize: ", maxMapSize)
-    // scalastyle:on
     maxMapSize
   }
 
@@ -618,6 +430,7 @@ abstract class TerAbsApproxTopK[T]
         DateType,
         TimestampType,
         StringTypeWithCollation(supportsTrimCollation = true)),
+      IntegerType,
       IntegerType)
 
   override def merge(sketch: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
@@ -682,13 +495,13 @@ abstract class TerAbsApproxTopK[T]
   }
 }
 
-case class TerApproxTopK(
+case class ApproxTopK(
                        first: Expression,
                        second: Expression,
                        third: Expression,
                        mutableAggBufferOffset: Int = 0,
                        inputAggBufferOffset: Int = 0)
-  extends TerAbsApproxTopK[Any]
+  extends AbsApproxTopK[Any]
     with TernaryLike[Expression] {
 
   def this(child: Expression, topK: Expression, maxItemsTracked: Expression) = {
@@ -709,16 +522,16 @@ case class TerApproxTopK(
 
   override def nullable: Boolean = false
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): TerApproxTopK =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopK =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): TerApproxTopK =
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ApproxTopK =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildrenInternal(
                                                   newFirst: Expression,
                                                   newSecond: Expression,
-                                                  newThird: Expression): TerApproxTopK =
+                                                  newThird: Expression): ApproxTopK =
     copy(first = newFirst, second = newSecond, third = newThird)
 
   override def dataType: DataType = {

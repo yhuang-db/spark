@@ -527,7 +527,6 @@ object FunctionRegistry {
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
     expression[ApproxTopK]("approx_top_k"),
-    expression[TerApproxTopK]("ter_approx_top_k"),
 
     // string functions
     expression[Ascii]("ascii"),

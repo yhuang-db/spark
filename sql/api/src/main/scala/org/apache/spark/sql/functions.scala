@@ -658,6 +658,12 @@ object functions {
    * @group agg_funcs
    * @since 4.0.?
    */
+  def approx_top_k(e: Column, k: Int, maxItemsTracked: Int): Column =
+    Column.fn("approx_top_k", e, lit(k), lit(maxItemsTracked))
+
+  def approx_top_k(columnName: String, k: Int, maxItemsTracked: Int): Column =
+    approx_top_k(Column(columnName), k, maxItemsTracked)
+
   def approx_top_k(e: Column, k: Int): Column =
     Column.fn("approx_top_k", e, lit(k))
 
@@ -669,24 +675,6 @@ object functions {
 
   def approx_top_k(columnName: String): Column =
     approx_top_k(Column(columnName))
-
-  def ter_approx_top_k(e: Column, k: Int, maxItemsTracked: Int): Column =
-    Column.fn("ter_approx_top_k", e, lit(k), lit(maxItemsTracked))
-
-  def ter_approx_top_k(columnName: String, k: Int, maxItemsTracked: Int): Column =
-    ter_approx_top_k(Column(columnName), k, maxItemsTracked)
-
-//  def ter_approx_top_k(e: Column, k: Int): Column =
-//    Column.fn("ter_approx_top_k", e, lit(k))
-//
-//  def ter_approx_top_k(columnName: String, k: Int): Column =
-//    ter_approx_top_k(Column(columnName), k)
-//
-//  def ter_approx_top_k(e: Column): Column =
-//    Column.fn("ter_approx_top_k", e)
-//
-//  def ter_approx_top_k(columnName: String): Column =
-//    ter_approx_top_k(Column(columnName))
 
   /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
