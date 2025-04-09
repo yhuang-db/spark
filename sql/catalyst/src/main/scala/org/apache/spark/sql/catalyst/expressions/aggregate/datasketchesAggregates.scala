@@ -601,4 +601,3 @@ case class ApproxTopK(
     new GenericArrayData(result)
   }
 }
-

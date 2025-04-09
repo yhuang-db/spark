@@ -1880,8 +1880,8 @@ class DataFrameAggregateSuite extends QueryTest
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
         "FROM VALUES (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0), (4.0) AS tab(expr);")
     checkAnswer(
-      res12.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
-      Row(Seq(Row(0.0, 2), Row(1.0, 2))))
+      res12,
+      Row(Seq(Row(new java.math.BigDecimal("0.0"), 2), Row(new java.math.BigDecimal("1.0"), 2))))
 
     // Decimal
     val res13 = sql(
@@ -1891,8 +1891,8 @@ class DataFrameAggregateSuite extends QueryTest
         "CAST(2.0 AS DECIMAL(10, 2)), CAST(3.0 AS DECIMAL(10, 2)), " +
         "CAST(4.0 AS DECIMAL(10, 2)), CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);")
     checkAnswer(
-      res13.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
-      Row(Seq(Row(0.0, 2), Row(1.0, 2))))
+      res13,
+      Row(Seq(Row(new java.math.BigDecimal("0.00"), 2), Row(new java.math.BigDecimal("1.00"), 2))))
 
     // Decimal
     val res14 = sql(
@@ -1902,8 +1902,8 @@ class DataFrameAggregateSuite extends QueryTest
         "CAST(2.0 AS DECIMAL(20, 1)), CAST(3.0 AS DECIMAL(20, 1)), " +
         "CAST(4.0 AS DECIMAL(20, 1)), CAST(4.0 AS DECIMAL(20, 1)) AS tab(expr);")
     checkAnswer(
-      res14.selectExpr("transform(top_k_result, x -> struct(cast(x.item as double), x.Estimate))"),
-      Row(Seq(Row(0.0, 2), Row(4.0, 2))))
+      res14,
+      Row(Seq(Row(new java.math.BigDecimal("0.0"), 2), Row(new java.math.BigDecimal("4.0"), 2))))
   }
 
   test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
