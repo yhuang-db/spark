@@ -1785,6 +1785,33 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(Array(1), Array(1)))
   }
 
+  test("SPARK-combine") {
+    // scalastyle:off
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr) AS accumulate FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);").toDF()
+    acc1.createOrReplaceTempView("acc1")
+
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr) AS accumulate FROM VALUES (0), (1), (1), (2), (2), (2), (3), (4) AS tab(expr);").toDF()
+    acc2.createOrReplaceTempView("acc2")
+
+    val union = sql("select accumulate from acc1 UNION ALL select accumulate from acc2").toDF()
+    union.createOrReplaceTempView("accs")
+    union.show()
+
+    val combine = sql ("SELECT approx_top_k_combine(accumulate) FROM accs;")
+    combine.show()
+    // scalastyle:on
+  }
+
+  test("SPARK-accumulate") {
+    // scalastyle:off
+    val res1 = sql("SELECT approx_top_k_accumulate(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);")
+    res1.show()
+
+    val res2 = sql("SELECT approx_top_k_accumulate(expr, 20) FROM VALUES (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0), (4.0) AS tab(expr);")
+    res2.show()
+    // scalastyle:on
+  }
+
   test("SPARK-xxxxx: DataSketches-based approx top-k tests") {
     // Integer
     val res1 = sql(
