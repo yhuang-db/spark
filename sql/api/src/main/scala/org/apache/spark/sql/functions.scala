@@ -653,6 +653,66 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns approximate top k (frequent) items of a column, using DataSketches
+   *
+   * @group agg_funcs
+   * @since 4.0.?
+   */
+  def approx_top_k(e: Column, k: Int, maxItemsTracked: Int): Column =
+    Column.fn("approx_top_k", e, lit(k), lit(maxItemsTracked))
+
+  def approx_top_k(columnName: String, k: Int, maxItemsTracked: Int): Column =
+    approx_top_k(Column(columnName), k, maxItemsTracked)
+
+  def approx_top_k(e: Column, k: Int): Column =
+    Column.fn("approx_top_k", e, lit(k))
+
+  def approx_top_k(columnName: String, k: Int): Column =
+    approx_top_k(Column(columnName), k)
+
+  def approx_top_k(e: Column): Column =
+    Column.fn("approx_top_k", e)
+
+  def approx_top_k(columnName: String): Column =
+    approx_top_k(Column(columnName))
+
+  def approx_top_k_accumulate(e: Column, maxItemsTracked: Int): Column =
+    Column.fn("approx_top_k_accumulate", e, lit(maxItemsTracked))
+
+  def approx_top_k_accumulate(e: Column): Column =
+    Column.fn("approx_top_k_accumulate", e)
+
+  def approx_top_k_combine(e: Column, maxItemsTracked: Int): Column =
+    Column.fn("approx_top_k_combine", e, lit(maxItemsTracked))
+
+  def approx_top_k_combine(e: Column): Column =
+    Column.fn("approx_top_k_combine", e)
+
+  def approx_top_k_estimate(e: Column, k: Int): Column =
+    Column.fn("approx_top_k_estimate", e, lit(k))
+
+  def approx_top_k_estimate(e: Column): Column =
+    Column.fn("approx_top_k_estimate", e)
+
+  def approx_top_k_accumulate(columnName: String, maxItemsTracked: Int): Column =
+    approx_top_k_accumulate(Column(columnName), maxItemsTracked)
+
+  def approx_top_k_accumulate(columnName: String): Column =
+    approx_top_k_accumulate(Column(columnName))
+
+  def approx_top_k_combine(e: String, maxItemsTracked: Int): Column =
+    approx_top_k_combine(Column(e), maxItemsTracked: Int)
+
+  def approx_top_k_combine(e: String): Column =
+    approx_top_k_combine(Column(e))
+
+  def approx_top_k_estimate(columnName: String, k: Int): Column =
+    approx_top_k_estimate(Column(columnName), k)
+
+  def approx_top_k_estimate(columnName: String): Column =
+    approx_top_k_estimate(Column(columnName))
+
+  /**
    * Aggregate function: returns the updatable binary representation of the Datasketches HllSketch
    * configured with lgConfigK arg.
    *
