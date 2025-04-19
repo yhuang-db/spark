@@ -32,114 +32,106 @@ class ApproxTopKSuite extends QueryTest
 
   import testImplicits._
 
-  test("SPARK-xxxxx: test parameters") {
-    // Integer
-    val res1 = sql(
+  test("SPARK-xxxxx: test of 1 parameter") {
+    val res = sql(
       "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
     )
-    checkAnswer(res1, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
+    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
+  }
 
-    // String
-    val res2 = sql(
-      "SELECT approx_top_k(expr, 2)" +
+  test("SPARK-xxxxx: test of 2 parameter") {
+    val res = sql(
+      "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    checkAnswer(res2, Row(Seq(Row("c", 4), Row("d", 2))))
+    checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
+  }
 
-    val res3 = sql(
+  test("SPARK-xxxxx: test of 3 parameter") {
+    val res = sql(
       "SELECT approx_top_k(expr, 10, 100) FROM VALUES (0), (1), (1), (2), (2), (2) AS tab(expr);"
     )
-    checkAnswer(res3, Row(Seq(Row(2, 3), Row(1, 2), Row(0, 1))))
+    checkAnswer(res, Row(Seq(Row(2, 3), Row(1, 2), Row(0, 1))))
   }
 
-  test("SPARK-xxxxx: test for integer type") {
-    // Integer
-    val res1 = sql(
+  test("SPARK-xxxxx: test of Integer type") {
+    val res = sql(
       "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
     )
-    checkAnswer(res1, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
+    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2), Row(1, 2), Row(2, 1), Row(3, 1))))
   }
 
-  test("SPARK-xxxxx: test for string type") {
-    // String
-    val res2 = sql(
+  test("SPARK-xxxxx: test of String type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2)" +
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    checkAnswer(res2, Row(Seq(Row("c", 4), Row("d", 2))))
+    checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
   }
 
-  test("SPARK-xxxxx: test for boolean type") {
-    // Boolean
+  test("SPARK-xxxxx: test of Boolean type") {
     val dfBool = Seq(true, true, false, true, true, false, false).toDF("expr")
     dfBool.createOrReplaceTempView("t_bool")
-    val res4 = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
-    checkAnswer(res4, Row(Seq(Row(true, 4))))
+    val res = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
+    checkAnswer(res, Row(Seq(Row(true, 4))))
   }
 
-  test("SPARK-xxxxx: test for byte type") {
-    // Byte
-    val res5 = sql(
+  test("SPARK-xxxxx: test of Byte type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), cast(1 AS BYTE), " +
         "cast(2 AS BYTE), cast(3 AS BYTE), cast(4 AS BYTE), cast(4 AS BYTE) AS tab(expr);")
-    checkAnswer(res5, Row(Seq(Row(0, 2), Row(4, 2))))
+    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2))))
   }
 
-  test("SPARK-xxxxx: test for short type") {
-    // Short
-    val res6 = sql(
+  test("SPARK-xxxxx: test of Short type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS SHORT), cast(0 AS SHORT), cast(1 AS SHORT), cast(1 AS SHORT), " +
         "cast(2 AS SHORT), cast(3 AS SHORT), cast(4 AS SHORT), cast(4 AS SHORT) AS tab(expr);")
-    checkAnswer(res6, Row(Seq(Row(0, 2), Row(4, 2))))
+    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2))))
   }
 
-  test("SPARK-xxxxx: test for long type") {
-    // Long
-    val res7 = sql(
+  test("SPARK-xxxxx: test of Long type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0 AS LONG), cast(0 AS LONG), cast(1 AS LONG), cast(1 AS LONG), " +
         "cast(2 AS LONG), cast(3 AS LONG), cast(4 AS LONG), cast(4 AS LONG) AS tab(expr);")
-    checkAnswer(res7, Row(Seq(Row(0, 2), Row(4, 2))))
+    checkAnswer(res, Row(Seq(Row(0, 2), Row(4, 2))))
   }
 
-  test("SPARK-xxxxx: test for float type") {
-    // Float
-    val res8 = sql(
+  test("SPARK-xxxxx: test of Float type") {
+    val res = sql(
       "SELECT approx_top_k(expr) " +
         "FROM VALUES cast(0.0 AS FLOAT), cast(0.0 AS FLOAT), " +
         "cast(1.0 AS FLOAT), cast(1.0 AS FLOAT), " +
         "cast(2.0 AS FLOAT), cast(3.0 AS FLOAT), " +
         "cast(4.0 AS FLOAT), cast(4.0 AS FLOAT) AS tab(expr);")
-    checkAnswer(res8, Row(Seq(Row(0.0, 2), Row(1.0, 2), Row(4.0, 2), Row(2.0, 1), Row(3.0, 1))))
+    checkAnswer(res, Row(Seq(Row(0.0, 2), Row(1.0, 2), Row(4.0, 2), Row(2.0, 1), Row(3.0, 1))))
   }
 
-  test("SPARK-xxxxx: test for double type") {
-    // Double
-    val res9 = sql(
+  test("SPARK-xxxxx: test of Double type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast(0.0 AS DOUBLE), cast(0.0 AS DOUBLE), " +
         "cast(1.0 AS DOUBLE), cast(1.0 AS DOUBLE), " +
         "cast(2.0 AS DOUBLE), cast(3.0 AS DOUBLE), " +
         "cast(4.0 AS DOUBLE), cast(4.0 AS DOUBLE) AS tab(expr);")
-    checkAnswer(res9, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
+    checkAnswer(res, Row(Seq(Row(0.0, 2), Row(4.0, 2))))
   }
 
-  test("SPARK-xxxxx: test for date type") {
-    // Date
-    val res10 = sql(
+  test("SPARK-xxxxx: test of Date type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast('2023-01-01' AS DATE), cast('2023-01-01' AS DATE), " +
         "cast('2023-01-02' AS DATE), cast('2023-01-02' AS DATE), " +
         "cast('2023-01-03' AS DATE), cast('2023-01-04' AS DATE), " +
         "cast('2023-01-05' AS DATE), cast('2023-01-05' AS DATE) AS tab(expr);")
     checkAnswer(
-      res10,
+      res,
       Row(Seq(Row(Date.valueOf("2023-01-02"), 2), Row(Date.valueOf("2023-01-01"), 2))))
   }
 
-  test("SPARK-xxxxx: test for timestamp type") {
-    // Timestamp
-    val res11 = sql(
+  test("SPARK-xxxxx: test of Timestamp type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) " +
         "FROM VALUES cast('2023-01-01 00:00:00' AS TIMESTAMP), " +
         "cast('2023-01-01 00:00:00' AS TIMESTAMP), " +
@@ -150,44 +142,41 @@ class ApproxTopKSuite extends QueryTest
         "cast('2023-01-05 00:00:00' AS TIMESTAMP), " +
         "cast('2023-01-05 00:00:00' AS TIMESTAMP) AS tab(expr);")
     checkAnswer(
-      res11,
+      res,
       Row(Seq(Row(Timestamp.valueOf("2023-01-02 00:00:00"), 2),
         Row(Timestamp.valueOf("2023-01-05 00:00:00"), 2))))
   }
 
-  test("SPARK-xxxxx: test for decimal type") {
-    // Decimal
-    val res12 = sql(
+  test("SPARK-xxxxx: test of Decimal type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
         "FROM VALUES (0.0), (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0) AS tab(expr);")
     checkAnswer(
-      res12,
+      res,
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 
-  test("SPARK-xxxxx: test for decimal(10, 2) type") {
-    // Decimal
-    val res13 = sql(
+  test("SPARK-xxxxx: test of Decimal(10, 2) type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
         "FROM VALUES CAST(0.0 AS DECIMAL(10, 2)), CAST(0.0 AS DECIMAL(10, 2)), " +
         "CAST(0.0 AS DECIMAL(10, 2)), CAST(1.0 AS DECIMAL(10, 2)), " +
         "CAST(1.0 AS DECIMAL(10, 2)), CAST(2.0 AS DECIMAL(10, 2)), " +
         "CAST(3.0 AS DECIMAL(10, 2)), CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);")
     checkAnswer(
-      res13,
+      res,
       Row(Seq(Row(new java.math.BigDecimal("0.00"), 3), Row(new java.math.BigDecimal("1.00"), 2))))
   }
 
-  test("SPARK-xxxxx: test for decimal(20, 1) type") {
-    // Decimal
-    val res14 = sql(
+  test("SPARK-xxxxx: test of Decimal(20, 1) type") {
+    val res = sql(
       "SELECT approx_top_k(expr, 2) AS top_k_result " +
         "FROM VALUES CAST(0.0 AS DECIMAL(20, 1)), CAST(0.0 AS DECIMAL(20, 1)), " +
         "CAST(0.0 AS DECIMAL(20, 1)), CAST(1.0 AS DECIMAL(20, 1)), " +
         "CAST(1.0 AS DECIMAL(20, 1)), CAST(2.0 AS DECIMAL(20, 1)), " +
         "CAST(3.0 AS DECIMAL(20, 1)), CAST(4.0 AS DECIMAL(20, 1)) AS tab(expr);")
     checkAnswer(
-      res14,
+      res,
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 }
