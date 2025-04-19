@@ -24,7 +24,7 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalByteArrSerDe, ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalsSerDe, ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -450,15 +450,8 @@ abstract class AbsApproxTopK[T]
     case _: StringType =>
       sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
     case dt: DecimalType =>
-      val precision = dt.precision
-      if (precision <= Decimal.MAX_INT_DIGITS) {
-        sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else if (precision <= Decimal.MAX_LONG_DIGITS) {
-        sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else {
-        sketch.toByteArray(
-          new ArrayOfDecimalByteArrSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-      }
+      sketch.toByteArray(
+        new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
   }
 
   override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = first.dataType match {
@@ -478,20 +471,10 @@ abstract class AbsApproxTopK[T]
       ItemsSketch.getInstance(
         Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
     case dt: DecimalType =>
-      val precision = dt.precision
-      if (precision <= Decimal.MAX_INT_DIGITS) {
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else if (precision <= Decimal.MAX_LONG_DIGITS) {
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      } else {
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfDecimalByteArrSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-      }
+      ItemsSketch.getInstance(
+        Memory.wrap(buffer),
+        new ArrayOfDecimalsSerDe(dt.precision, dt.scale)
+          .asInstanceOf[ArrayOfItemsSerDe[T]])
   }
 }
 
@@ -557,14 +540,7 @@ case class ApproxTopK(
         case st: StringType =>
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           sketch.update(cKey.toString)
-        case dt: DecimalType =>
-          if (dt.precision <= Decimal.MAX_INT_DIGITS) {
-            sketch.update(v.asInstanceOf[Decimal].toUnscaledLong.toInt)
-          } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-            sketch.update(v.asInstanceOf[Decimal].toUnscaledLong)
-          } else {
-            sketch.update(v.asInstanceOf[Decimal])
-          }
+        case _: DecimalType => sketch.update(v.asInstanceOf[Decimal])
       }
     }
     sketch
@@ -584,18 +560,7 @@ case class ApproxTopK(
         case _: StringType =>
           val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
           result(i) = InternalRow.apply(item, row.getEstimate)
-        case dt: DecimalType =>
-          if (dt.precision <= Decimal.MAX_INT_DIGITS) {
-            val intItem = row.getItem.asInstanceOf[Int]
-            val decimalItem = Decimal.createUnsafe(intItem, dt.precision, dt.scale)
-            result(i) = InternalRow.apply(decimalItem, row.getEstimate)
-          } else if (dt.precision <= Decimal.MAX_LONG_DIGITS) {
-            val longItem = row.getItem.asInstanceOf[Long]
-            val decimalItem = Decimal.createUnsafe(longItem, dt.precision, dt.scale)
-            result(i) = InternalRow.apply(decimalItem, row.getEstimate)
-          } else {
-            result(i) = InternalRow.apply(row.getItem, row.getEstimate)
-          }
+        case _: DecimalType => result(i) = InternalRow.apply(row.getItem, row.getEstimate)
       }
     }
     new GenericArrayData(result)
