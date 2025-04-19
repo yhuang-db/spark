@@ -38,10 +38,6 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
     private final int scale;
     private final ArrayOfItemsSerDe<?> delegate;
 
-    private int decimalToInt(Decimal item) {
-        return ((int) item.toUnscaledLong());
-    }
-
     public ArrayOfDecimalsSerDe(int precision, int scale) {
         this.precision = precision;
         this.scale = scale;
@@ -138,6 +134,10 @@ public class ArrayOfDecimalsSerDe extends ArrayOfItemsSerDe<Decimal> {
     @Override
     public Class<Decimal> getClassOfT() {
         return Decimal.class;
+    }
+
+    private int decimalToInt(Decimal item) {
+        return ((int) item.toUnscaledLong());
     }
 
 
