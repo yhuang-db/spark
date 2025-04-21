@@ -113,11 +113,11 @@ abstract class AbsApproxTopK[T]
 }
 
 case class ApproxTopK(
-                       first: Expression,
-                       second: Expression,
-                       third: Expression,
-                       mutableAggBufferOffset: Int = 0,
-                       inputAggBufferOffset: Int = 0)
+  first: Expression,
+  second: Expression,
+  third: Expression,
+  mutableAggBufferOffset: Int = 0,
+  inputAggBufferOffset: Int = 0)
   extends AbsApproxTopK[Any]
     with TernaryLike[Expression] {
 
@@ -144,9 +144,9 @@ case class ApproxTopK(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildrenInternal(
-                                                  newFirst: Expression,
-                                                  newSecond: Expression,
-                                                  newThird: Expression): ApproxTopK =
+    newFirst: Expression,
+    newSecond: Expression,
+    newThird: Expression): ApproxTopK =
     copy(first = newFirst, second = newSecond, third = newThird)
 
   override def dataType: DataType = {
