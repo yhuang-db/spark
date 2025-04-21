@@ -57,10 +57,10 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "3.5.0")
 // scalastyle:on line.size.limit
 case class HllSketchAgg(
-                         left: Expression,
-                         right: Expression,
-                         mutableAggBufferOffset: Int = 0,
-                         inputAggBufferOffset: Int = 0)
+    left: Expression,
+    right: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[HllSketch] with BinaryLike[Expression] with ExpectsInputTypes {
 
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
@@ -235,10 +235,10 @@ object HllSketchAgg {
   since = "3.5.0")
 // scalastyle:on line.size.limit
 case class HllUnionAgg(
-                        left: Expression,
-                        right: Expression,
-                        mutableAggBufferOffset: Int = 0,
-                        inputAggBufferOffset: Int = 0)
+    left: Expression,
+    right: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[Option[Union]]
     with BinaryLike[Expression]
     with ExpectsInputTypes {
@@ -388,7 +388,7 @@ case class HllUnionAgg(
   override def deserialize(buffer: Array[Byte]): Option[Union] = {
     if (buffer.length != 0) {
       Some(Union.heapify(buffer))
-      // unclear if these scenarios can ever occur
+    // unclear if these scenarios can ever occur
     } else {
       None
     }
