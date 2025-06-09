@@ -765,6 +765,30 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns approximate top k (frequent) items of a column, using DataSketches
+   *
+   * @group agg_funcs
+   * @since 4.0.?
+   */
+  def approx_top_k(e: Column, k: Int, maxItemsTracked: Int): Column =
+    Column.fn("approx_top_k", e, lit(k), lit(maxItemsTracked))
+
+  def approx_top_k(columnName: String, k: Int, maxItemsTracked: Int): Column =
+    approx_top_k(Column(columnName), k, maxItemsTracked)
+
+  def approx_top_k(e: Column, k: Int): Column =
+    Column.fn("approx_top_k", e, lit(k))
+
+  def approx_top_k(columnName: String, k: Int): Column =
+    approx_top_k(Column(columnName), k)
+
+  def approx_top_k(e: Column): Column =
+    Column.fn("approx_top_k", e)
+
+  def approx_top_k(columnName: String): Column =
+    approx_top_k(Column(columnName))
+
+  /**
    * Aggregate function: returns the kurtosis of the values in a group.
    *
    * @group agg_funcs
