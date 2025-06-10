@@ -179,4 +179,14 @@ class ApproxTopKSuite extends QueryTest
       res,
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
+
+  test("SPARK-ace: test of accumulate and estimate") {
+    val res1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (3), (4) AS tab(expr);")
+    res1.show(truncate = false)
+
+    res1.createOrReplaceTempView("accumulation")
+    val res2 = sql("SELECT approx_top_k_estimate(acc) FROM accumulation;")
+    res2.show(truncate = false)
+  }
 }
