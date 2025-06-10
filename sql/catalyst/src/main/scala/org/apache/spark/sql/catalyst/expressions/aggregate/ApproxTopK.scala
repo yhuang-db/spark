@@ -115,6 +115,15 @@ abstract class AbsApproxTopK[T]
   }
 }
 
+/**
+ * ApproxTopK is an aggregate function that returns the top K frequent items in a dataset.
+ * It uses the ItemsSketch from the DataSketches library to maintain an approximate count of items.
+ * It returns an array of structs, where each struct contains an item and its estimated count.
+ *
+ * @param first  Column name or expression whose top K items are to be estimated.
+ * @param second K: the number of top items to return.
+ * @param third  The maximum number of frequent items to track.
+ */
 case class ApproxTopK(
                        first: Expression,
                        second: Expression,
@@ -237,10 +246,10 @@ abstract class AbsApproxTopKAccumulate[T]
       IntegerType)
   }
 
-  //  override def dataType: DataType = BinaryType
   override def dataType: DataType = StructType(
     StructField("DataSketch", BinaryType, nullable = false) ::
-      StructField("ItemTypeNull", left.dataType) :: Nil)
+      StructField("ItemTypeNull", left.dataType) ::
+      StructField("MaxMapSize", IntegerType) :: Nil)
 
   override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](maxMapSize)
 
@@ -290,12 +299,20 @@ abstract class AbsApproxTopKAccumulate[T]
   }
 }
 
+/**
+ * ApproxTopKAccumulate is an aggregate function that accumulates the top K frequent items,
+ * and return the DataSketch in binary format.
+ *
+ * @param left  Column name or expression whose top K items are to be estimated.
+ * @param right The maximum number of frequent items to track in the sketch.
+ */
 case class ApproxTopKAccumulate(
                                  left: Expression,
                                  right: Expression,
                                  mutableAggBufferOffset: Int = 0,
                                  inputAggBufferOffset: Int = 0)
-  extends AbsApproxTopKAccumulate[Any] with BinaryLike[Expression] {
+  extends AbsApproxTopKAccumulate[Any]
+    with BinaryLike[Expression] {
 
   def this(child: Expression, maxItemsTracked: Expression) = this(child, maxItemsTracked, 0, 0)
 
@@ -342,12 +359,22 @@ case class ApproxTopKAccumulate(
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
     val sketchBytes = serialize(buffer)
-    InternalRow.apply(sketchBytes, null)
+    InternalRow.apply(sketchBytes, null, maxMapSize)
   }
 }
 
+/**
+ * ApproxTopKEstimate is an expression that estimates the top K frequent items from a DataSketch.
+ * It takes a DataSketch in binary format and returns an array of structs, where each struct
+ * contains an item and its estimated count.
+ *
+ * @param left  The DataSketch in binary format.
+ * @param right K: the number of top items to return.
+ */
 case class ApproxTopKEstimate(left: Expression, right: Expression)
-  extends BinaryExpression with CodegenFallback with ExpectsInputTypes {
+  extends BinaryExpression
+    with CodegenFallback
+    with ExpectsInputTypes {
 
   def this(child: Expression, topK: Int) = this(child, Literal(topK))
 
