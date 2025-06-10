@@ -811,6 +811,19 @@ object functions {
 
   def approx_top_k_estimate(columnName: String): Column =
     approx_top_k_estimate(Column(columnName))
+
+  def approx_top_k_combine(e: Column, maxItemsTracked: Int): Column =
+    Column.fn("approx_top_k_combine", e, lit(maxItemsTracked))
+
+  def approx_top_k_combine(columnName: String, maxItemsTracked: Int): Column =
+    approx_top_k_combine(Column(columnName), maxItemsTracked)
+
+  def approx_top_k_combine(e: Column): Column =
+    Column.fn("approx_top_k_combine", e)
+
+  def approx_top_k_combine(columnName: String): Column =
+    approx_top_k_combine(Column(columnName))
+
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
    *

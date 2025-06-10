@@ -33,7 +33,6 @@ class ApproxTopKSuite extends QueryTest
   import testImplicits._
 
 
-
   test("SPARK-xxxxx: test of 1 parameter") {
     val res = sql(
       "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
@@ -198,5 +197,45 @@ class ApproxTopKSuite extends QueryTest
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
     res.show(truncate = false)
     checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
+  }
+
+  test("SPARK-combine: test of accumulate, combine and estimate") {
+    val res1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (3), (4) AS tab(expr);")
+    res1.show(truncate = false)
+    res1.createOrReplaceTempView("accumulation1")
+
+    val res2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+    res2.show(truncate = false)
+    res2.createOrReplaceTempView("accumulation2")
+
+    val res3 = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    res3.show(truncate = false)
+    res3.createOrReplaceTempView("combined")
+
+    val res4 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    res4.show(truncate = false)
+  }
+
+  test("SPARK-combine: test of accumulate, combine and estimate 2") {
+    val res1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+    res1.show(truncate = false)
+    res1.createOrReplaceTempView("accumulation1")
+
+    val res2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+    res2.show(truncate = false)
+    res2.createOrReplaceTempView("accumulation2")
+
+    val res3 = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    res3.show(truncate = false)
+    res3.createOrReplaceTempView("combined")
+
+    val res4 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    res4.show(truncate = false)
   }
 }
