@@ -237,7 +237,10 @@ abstract class AbsApproxTopKAccumulate[T]
       IntegerType)
   }
 
-  override def dataType: DataType = BinaryType
+  //  override def dataType: DataType = BinaryType
+  override def dataType: DataType = StructType(
+    StructField("DataSketch", BinaryType, nullable = false) ::
+      StructField("ItemTypeNull", left.dataType) :: Nil)
 
   override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](maxMapSize)
 
@@ -339,23 +342,7 @@ case class ApproxTopKAccumulate(
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
     val sketchBytes = serialize(buffer)
-    val typeByte: Byte = left.dataType match {
-      case _: BooleanType => 0
-      case _: ByteType => 1
-      case _: ShortType => 2
-      case _: IntegerType => 3
-      case _: LongType => 4
-      case _: FloatType => 5
-      case _: DoubleType => 6
-      case _: DateType => 7
-      case _: TimestampType => 8
-      case _: StringType => 9
-      case _: DecimalType => 10
-    }
-    val result = new Array[Byte](1 + sketchBytes.length)
-    result(0) = typeByte
-    System.arraycopy(sketchBytes, 0, result, 1, sketchBytes.length)
-    result
+    InternalRow.apply(sketchBytes, null)
   }
 }
 
@@ -366,29 +353,11 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
 
   def this(child: Expression) = this(child, Literal(5))
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
   private lazy val itemDataType: DataType = {
-    // decide item data type based on the first byte of the binary data
-    //    val inputBytes = left.eval().asInstanceOf[Array[Byte]]
-    //    val typeByte = left.eval().asInstanceOf[Array[Byte]](0)
-    //    typeByte match {
-    //      case 0 => BooleanType
-    //      case 1 => ByteType
-    //      case 2 => ShortType
-    //      case 3 => IntegerType
-    //      case 4 => LongType
-    //      case 5 => FloatType
-    //      case 6 => DoubleType
-    //      case 7 => DateType
-    //      case 8 => TimestampType
-    //      case 9 => StringType
-    //      case 10 => DecimalType.SYSTEM_DEFAULT
-    //    }
-    // scalastyle:off
-    println("debug")
-    // scalastyle:on
-    IntegerType
+    // itemDataType is the type of the "ItemTypeNull" field of the output of ACCUMULATE or COMBINE
+    left.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
   }
 
   override def dataType: DataType = {
@@ -406,12 +375,11 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
   override def prettyName: String = "approx_top_k_estimate"
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val inputBytes = input1.asInstanceOf[Array[Byte]]
-    val sketchBytes = inputBytes.slice(1, inputBytes.length)
+    val dataSketchBytes = input1.asInstanceOf[InternalRow].getBinary(0)
     val topK = input2.asInstanceOf[Int]
 
     val itemsSketch = ItemsSketch.getInstance(
-      Memory.wrap(sketchBytes), itemDataType match {
+      Memory.wrap(dataSketchBytes), itemDataType match {
         case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
         case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
           new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]

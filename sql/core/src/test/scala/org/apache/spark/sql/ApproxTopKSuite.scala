@@ -32,6 +32,8 @@ class ApproxTopKSuite extends QueryTest
 
   import testImplicits._
 
+
+
   test("SPARK-xxxxx: test of 1 parameter") {
     val res = sql(
       "SELECT approx_top_k(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);"
@@ -188,5 +190,13 @@ class ApproxTopKSuite extends QueryTest
     res1.createOrReplaceTempView("accumulation")
     val res2 = sql("SELECT approx_top_k_estimate(acc) FROM accumulation;")
     res2.show(truncate = false)
+  }
+
+  test("SPARK-ace: accumulate and estimate test of String type") {
+    val res = sql(
+      "SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2)" +
+        "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
+    res.show(truncate = false)
+    checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
   }
 }
