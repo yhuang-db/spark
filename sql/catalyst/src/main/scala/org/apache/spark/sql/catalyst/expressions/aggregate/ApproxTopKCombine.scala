@@ -37,10 +37,7 @@ abstract class AbsApproxTopKCombine[T]
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
-  lazy val itemDataType: DataType = {
-    // itemDataType is the type of the "ItemTypeNull" field of the output of ACCUMULATE or COMBINE
-    left.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
-  }
+  lazy val itemDataType: DataType = left.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
 
   override def dataType: DataType = StructType(
     StructField("DataSketch", BinaryType, nullable = false) ::
@@ -54,17 +51,15 @@ abstract class AbsApproxTopKCombine[T]
   override def createAggregationBuffer(): ItemsSketch[T] = {
     if (combineSizeSpecified) {
       val maxItemsTracked = right.eval().asInstanceOf[Int]
-      // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
       val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
-      // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
       val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
       // scalastyle:off
-      println(s"createAggregationBuffer: Combine size specified, create buffer with size $maxMapSize")
+      println(s"createAggregationBuffer: combine size specified, create buffer with size $maxMapSize")
       // scalastyle:on
       new ItemsSketch[T](maxMapSize)
     } else {
       // scalastyle:off
-      println("createAggregationBuffer: Combine size not specified, create a placeholder sketch")
+      println("createAggregationBuffer: combine size NOT specified, create a placeholder sketch")
       // scalastyle:on
       new ItemsSketch[T](8)
     }
@@ -92,27 +87,21 @@ abstract class AbsApproxTopKCombine[T]
   }
 
   override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = {
-    itemDataType match {
-      case _: BooleanType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType | _: TimestampType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case dt: DecimalType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-    }
+    ItemsSketch.getInstance(
+      Memory.wrap(buffer), itemDataType match {
+        case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+        case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
+          new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+        case _: LongType | _: TimestampType =>
+          new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+        case _: DoubleType =>
+          new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+        case _: StringType =>
+          new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+        case dt: DecimalType =>
+          new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]]
+      }
+    )
   }
 }
 
@@ -124,15 +113,11 @@ case class ApproxTopKCombine(
   extends AbsApproxTopKCombine[Any]
   with BinaryLike[Expression] {
 
-  def this(child: Expression, maxItemsTracked: Expression) =
-    this(child, maxItemsTracked, 0, 0)
+  def this(child: Expression, maxItemsTracked: Expression) = this(child, maxItemsTracked, 0, 0)
 
-  def this(child: Expression, maxItemsTracked: Int) =
-    this(child, Literal(maxItemsTracked), 0, 0)
+  def this(child: Expression, maxItemsTracked: Int) = this(child, Literal(maxItemsTracked), 0, 0)
 
   def this(child: Expression) = this(child, Literal(-1), 0, 0)
-
-  //  def this(child: Expression) = this(child, Literal(10000), 0, 0)
 
   override def nullable: Boolean = false
 
@@ -154,7 +139,7 @@ case class ApproxTopKCombine(
 
     val checkedSizeBuffer = if (combineSizeSpecified) {
       // scalastyle:off
-      println("update: Combine size specified, re-use the buffer")
+      println("update: combine size specified, use existing buffer")
       // scalastyle:on
       buffer
     } else {
