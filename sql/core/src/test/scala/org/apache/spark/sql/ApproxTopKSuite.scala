@@ -300,12 +300,10 @@ class ApproxTopKSuite
     res2.show(truncate = false)
     res2.createOrReplaceTempView("accumulation2")
 
-
     val res3 = sql("SELECT approx_top_k_accumulate(expr, 30) as acc " +
       "FROM VALUES (5), (5), (5), (5), (5), (0), (0), (0) AS tab(expr);")
     res3.show(truncate = false)
     res3.createOrReplaceTempView("accumulation3")
-
 
     val res4 = sql("SELECT approx_top_k_combine(acc) as com " +
       "FROM (SELECT acc from accumulation1 " +
