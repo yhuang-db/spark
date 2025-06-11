@@ -279,4 +279,33 @@ class ApproxTopKSuite
     val res4 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
     res4.show(truncate = false)
   }
+
+  test("SPARK-combine5: test of accumulate, combine and estimate 5") {
+    val res1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+    res1.show(truncate = false)
+    res1.createOrReplaceTempView("accumulation1")
+
+    val res2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+    res2.show(truncate = false)
+    res2.createOrReplaceTempView("accumulation2")
+
+
+    val res3 = sql("SELECT approx_top_k_accumulate(expr, 30) as acc " +
+      "FROM VALUES (5), (5), (5), (5), (5), (0), (0), (0) AS tab(expr);")
+    res3.show(truncate = false)
+    res3.createOrReplaceTempView("accumulation3")
+
+
+    val res4 = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 " +
+      "UNION ALL SELECT acc FROM accumulation2 " +
+      "UNION ALL SELECT acc FROM accumulation3);")
+    res4.show(truncate = false)
+    res4.createOrReplaceTempView("combined")
+
+    val res5 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    res5.show(truncate = false)
+  }
 }
