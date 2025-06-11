@@ -52,22 +52,21 @@ abstract class AbsApproxTopKCombine[T]
   lazy val combineSizeSpecified: Boolean = right.eval().asInstanceOf[Int] != -1
 
   override def createAggregationBuffer(): ItemsSketch[T] = {
-    combineSizeSpecified match {
-      case true =>
-        val maxItemsTracked = right.eval().asInstanceOf[Int]
-        // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
-        val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
-        // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-        val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-        // scalastyle:off
-        println(s"createAggregationBuffer: Combine size specified, create buffer with size $maxMapSize")
-        // scalastyle:on
-        new ItemsSketch[T](maxMapSize)
-      case false =>
-        // scalastyle:off
-        println("createAggregationBuffer: Combine size not specified, create a placeholder sketch with size 8")
-        // scalastyle:on
-        new ItemsSketch[T](8)
+    if (combineSizeSpecified) {
+      val maxItemsTracked = right.eval().asInstanceOf[Int]
+      // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
+      val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
+      // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
+      val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
+      // scalastyle:off
+      println(s"createAggregationBuffer: Combine size specified, create buffer with size $maxMapSize")
+      // scalastyle:on
+      new ItemsSketch[T](maxMapSize)
+    } else {
+      // scalastyle:off
+      println("createAggregationBuffer: Combine size not specified, create a placeholder sketch")
+      // scalastyle:on
+      new ItemsSketch[T](8)
     }
   }
 
@@ -164,7 +163,7 @@ case class ApproxTopKCombine(
         case Some(size) if size != currMaxItemsTracked =>
           throw new IllegalArgumentException(
             s"All sketches must have the same max items tracked, " +
-              s"but found ${currMaxItemsTracked} and ${size}")
+              s"but found $currMaxItemsTracked and $size")
         case None =>
           firstSketchCount = Some(currMaxItemsTracked)
           val ceilMaxMapSize = math.ceil(currMaxItemsTracked / 0.75).toInt
