@@ -26,7 +26,8 @@ import org.apache.spark.tags.SlowSQLTest
 
 
 @SlowSQLTest
-class ApproxTopKSuite extends QueryTest
+class ApproxTopKSuite
+  extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 

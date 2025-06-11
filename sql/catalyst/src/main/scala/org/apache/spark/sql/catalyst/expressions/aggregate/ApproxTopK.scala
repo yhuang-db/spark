@@ -37,7 +37,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 abstract class AbsApproxTopK[T]
   extends TypedImperativeAggregate[ItemsSketch[T]]
-    with ExpectsInputTypes {
+  with ExpectsInputTypes {
 
   val first: Expression
   val second: Expression
@@ -125,13 +125,13 @@ abstract class AbsApproxTopK[T]
  * @param third  The maximum number of frequent items to track.
  */
 case class ApproxTopK(
-                       first: Expression,
-                       second: Expression,
-                       third: Expression,
-                       mutableAggBufferOffset: Int = 0,
-                       inputAggBufferOffset: Int = 0)
+    first: Expression,
+    second: Expression,
+    third: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends AbsApproxTopK[Any]
-    with TernaryLike[Expression] {
+  with TernaryLike[Expression] {
 
   def this(child: Expression, topK: Expression, maxItemsTracked: Expression) =
     this(child, topK, maxItemsTracked, 0, 0)
@@ -156,9 +156,9 @@ case class ApproxTopK(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildrenInternal(
-                                                  newFirst: Expression,
-                                                  newSecond: Expression,
-                                                  newThird: Expression): ApproxTopK =
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression): ApproxTopK =
     copy(first = newFirst, second = newSecond, third = newThird)
 
   override def dataType: DataType = {
@@ -215,7 +215,7 @@ case class ApproxTopK(
  */
 abstract class AbsApproxTopKAccumulate[T]
   extends TypedImperativeAggregate[ItemsSketch[T]]
-    with ExpectsInputTypes {
+  with ExpectsInputTypes {
 
   val left: Expression
   val right: Expression
@@ -307,12 +307,12 @@ abstract class AbsApproxTopKAccumulate[T]
  * @param right The maximum number of frequent items to track in the sketch.
  */
 case class ApproxTopKAccumulate(
-                                 left: Expression,
-                                 right: Expression,
-                                 mutableAggBufferOffset: Int = 0,
-                                 inputAggBufferOffset: Int = 0)
+    left: Expression,
+    right: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends AbsApproxTopKAccumulate[Any]
-    with BinaryLike[Expression] {
+  with BinaryLike[Expression] {
 
   def this(child: Expression, maxItemsTracked: Expression) = this(child, maxItemsTracked, 0, 0)
 
@@ -327,9 +327,8 @@ case class ApproxTopKAccumulate(
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override protected def withNewChildrenInternal(
-                                                  newLeft: Expression,
-                                                  newRight: Expression): ApproxTopKAccumulate =
-    copy(left = newLeft, right = newRight)
+      newLeft: Expression,
+      newRight: Expression): ApproxTopKAccumulate = copy(left = newLeft, right = newRight)
 
   override def nullable: Boolean = false
 
@@ -374,8 +373,8 @@ case class ApproxTopKAccumulate(
  */
 case class ApproxTopKEstimate(left: Expression, right: Expression)
   extends BinaryExpression
-    with CodegenFallback
-    with ExpectsInputTypes {
+  with CodegenFallback
+  with ExpectsInputTypes {
 
   def this(child: Expression, topK: Int) = this(child, Literal(topK))
 
@@ -395,8 +394,9 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
     ArrayType(resultEntryType, containsNull = false)
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-  : Expression = copy(left = newLeft, right = newRight)
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 
   override def nullIntolerant: Boolean = true
 
@@ -436,183 +436,5 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
       }
     }
     new GenericArrayData(result)
-  }
-}
-
-abstract class AbsApproxTopKCombine[T]
-  extends TypedImperativeAggregate[ItemsSketch[T]]
-    with ExpectsInputTypes {
-
-  val left: Expression
-  val right: Expression
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
-
-  lazy val itemDataType: DataType = {
-    // itemDataType is the type of the "ItemTypeNull" field of the output of ACCUMULATE or COMBINE
-    left.dataType.asInstanceOf[StructType]("ItemTypeNull").dataType
-  }
-
-  override def dataType: DataType = StructType(
-    StructField("DataSketch", BinaryType, nullable = false) ::
-      StructField("ItemTypeNull", itemDataType) ::
-      StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
-
-  var firstSketchCount: Option[Int] = None
-
-  lazy val combineSizeSpecified: Boolean = right.eval().asInstanceOf[Int] != -1
-
-  override def createAggregationBuffer(): ItemsSketch[T] = {
-    combineSizeSpecified match {
-      case true =>
-        val maxItemsTracked = right.eval().asInstanceOf[Int]
-        // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
-        val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
-        // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-        val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-        // scalastyle:off
-        println(s"createAggregationBuffer: Combine size specified, create buffer with size $maxMapSize")
-        // scalastyle:on
-        new ItemsSketch[T](maxMapSize)
-      case false =>
-        // scalastyle:off
-        println("createAggregationBuffer: Combine size not specified, create a placeholder sketch with size 8")
-        // scalastyle:on
-        new ItemsSketch[T](8)
-    }
-  }
-
-  override def merge(buffer: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
-    buffer.merge(input)
-
-  override def serialize(buffer: ItemsSketch[T]): Array[Byte] = {
-    itemDataType match {
-      case _: BooleanType =>
-        buffer.toByteArray(new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-        buffer.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType | _: TimestampType =>
-        buffer.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType =>
-        buffer.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType =>
-        buffer.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case dt: DecimalType =>
-        buffer.toByteArray(
-          new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-    }
-  }
-
-  override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = {
-    itemDataType match {
-      case _: BooleanType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType | _: TimestampType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case dt: DecimalType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-    }
-  }
-}
-
-case class ApproxTopKCombine(
-                              left: Expression,
-                              right: Expression,
-                              mutableAggBufferOffset: Int = 0,
-                              inputAggBufferOffset: Int = 0)
-  extends AbsApproxTopKCombine[Any]
-    with BinaryLike[Expression] {
-
-  def this(child: Expression, maxItemsTracked: Expression) =
-    this(child, maxItemsTracked, 0, 0)
-
-  def this(child: Expression, maxItemsTracked: Int) =
-    this(child, Literal(maxItemsTracked), 0, 0)
-
-  def this(child: Expression) = this(child, Literal(-1), 0, 0)
-
-  //  def this(child: Expression) = this(child, Literal(10000), 0, 0)
-
-  override def nullable: Boolean = false
-
-  override def prettyName: String = "approx_top_k_combine"
-
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-  : ApproxTopKCombine = copy(left = newLeft, right = newRight)
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopKCombine =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ApproxTopKCombine =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def update(buffer: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
-    val sketchBytes = left.eval(input).asInstanceOf[InternalRow].getBinary(0)
-    val currMaxItemsTracked = left.eval(input).asInstanceOf[InternalRow].getInt(2)
-
-    val checkedSizeBuffer = if (combineSizeSpecified) {
-      // scalastyle:off
-      println("update: Combine size specified, re-use the buffer")
-      // scalastyle:on
-      buffer
-    } else {
-      firstSketchCount match {
-        case Some(size) if size == currMaxItemsTracked => buffer
-        case Some(size) if size != currMaxItemsTracked =>
-          throw new IllegalArgumentException(
-            s"All sketches must have the same max items tracked, " +
-              s"but found ${currMaxItemsTracked} and ${size}")
-        case None =>
-          firstSketchCount = Some(currMaxItemsTracked)
-          val ceilMaxMapSize = math.ceil(currMaxItemsTracked / 0.75).toInt
-          val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-          // scalastyle:off
-          println(s"update: re-set buffer size to $maxMapSize")
-          // scalastyle:on
-          new ItemsSketch[Any](maxMapSize)
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Wired firstSketchCount: $firstSketchCount, " +
-              s"currMaxItemsTracked: $currMaxItemsTracked")
-      }
-    }
-
-    if (sketchBytes != null) {
-      val inputSketch = ItemsSketch.getInstance(
-        Memory.wrap(sketchBytes), itemDataType match {
-          case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-          case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-            new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-          case _: LongType | _: TimestampType =>
-            new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-          case _: DoubleType =>
-            new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-          case _: StringType =>
-            new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-          case dt: DecimalType =>
-            new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[Any]]
-        })
-      checkedSizeBuffer.merge(inputSketch)
-    }
-    checkedSizeBuffer
-  }
-
-  override def eval(buffer: ItemsSketch[Any]): Any = {
-    val sketchBytes = serialize(buffer)
-    val maxItemsTracked = right.eval().asInstanceOf[Int]
-    InternalRow.apply(sketchBytes, null, maxItemsTracked)
   }
 }
