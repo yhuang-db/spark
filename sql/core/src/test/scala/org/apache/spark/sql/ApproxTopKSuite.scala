@@ -20,6 +20,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
@@ -270,23 +271,31 @@ class ApproxTopKSuite
   }
 
   test("SPARK-combine4: test of accumulate, combine and estimate 4") {
-    val res1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    res1.show(truncate = false)
-    res1.createOrReplaceTempView("accumulation1")
+    acc1.createOrReplaceTempView("accumulation1")
 
-    val res2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
       "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    res2.show(truncate = false)
-    res2.createOrReplaceTempView("accumulation2")
+    acc2.createOrReplaceTempView("accumulation2")
 
-    val res3 = sql("SELECT approx_top_k_combine(acc) as com " +
+    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
       "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    res3.show(truncate = false)
-    res3.createOrReplaceTempView("combined")
+    comb.createOrReplaceTempView("combination")
 
-    val res4 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    res4.show(truncate = false)
+    val res = sql("SELECT approx_top_k_estimate(com) FROM combination;")
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        //        comb.collect()
+        res.collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+      parameters = Map(
+        "size1" -> "10",
+        "size2" -> "20"
+      )
+    )
   }
 
   test("SPARK-combine5: test of accumulate, combine and estimate 5") {

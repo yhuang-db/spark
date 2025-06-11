@@ -22,6 +22,7 @@ import org.apache.datasketches.common.{ArrayOfBooleansSerDe, ArrayOfDoublesSerDe
 import org.apache.datasketches.frequencies.ItemsSketch
 import org.apache.datasketches.memory.Memory
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalsSerDe, ExpectsInputTypes, Expression, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
@@ -106,12 +107,12 @@ abstract class AbsApproxTopKCombine[T]
   }
 
   override def merge(buffer: CombineInternal[T], input: CombineInternal[T]): CombineInternal[T] = {
-    // scalastyle:off
-    println("merge:")
-    // scalastyle:on
     if (buffer.getItemDataType != input.getItemDataType) {
-      throw new IllegalArgumentException(
-        s"Item data types do not match: ${buffer.getItemDataType} vs ${input.getItemDataType}")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
+        messageParameters = Map(
+          "type1" -> buffer.getItemDataType.toString,
+          "type2" -> input.getItemDataType.toString))
     } else {
       if (!combineSizeSpecified) {
         // check size
@@ -120,9 +121,11 @@ abstract class AbsApproxTopKCombine[T]
           buffer.setMaxItemsTracked(input.getMaxItemsTracked)
         }
         if (buffer.getMaxItemsTracked != input.getMaxItemsTracked) {
-          throw new IllegalArgumentException(
-            s"Sketch sizes do not match: " +
-              s"${buffer.getMaxItemsTracked} vs ${input.getMaxItemsTracked}")
+          throw new SparkUnsupportedOperationException(
+            errorClass = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+            messageParameters = Map(
+              "size1" -> buffer.getMaxItemsTracked.toString,
+              "size2" -> input.getMaxItemsTracked.toString))
         }
       }
       buffer.getSketch.merge(input.getSketch)
