@@ -446,15 +446,6 @@ abstract class AbsApproxTopKCombine[T]
   val left: Expression
   val right: Expression
 
-  lazy val maxMapSize: Int = {
-    val maxItemsTracked = right.eval().asInstanceOf[Int]
-    // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
-    val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
-    // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-    val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-    maxMapSize
-  }
-
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
   lazy val itemDataType: DataType = {
@@ -467,7 +458,29 @@ abstract class AbsApproxTopKCombine[T]
       StructField("ItemTypeNull", itemDataType) ::
       StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
 
-  override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](maxMapSize)
+  var firstSketchCount: Option[Int] = None
+
+  lazy val combineSizeSpecified: Boolean = right.eval().asInstanceOf[Int] != -1
+
+  override def createAggregationBuffer(): ItemsSketch[T] = {
+    combineSizeSpecified match {
+      case true =>
+        val maxItemsTracked = right.eval().asInstanceOf[Int]
+        // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
+        val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
+        // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
+        val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
+        // scalastyle:off
+        println(s"createAggregationBuffer: Combine size specified, create buffer with size $maxMapSize")
+        // scalastyle:on
+        new ItemsSketch[T](maxMapSize)
+      case false =>
+        // scalastyle:off
+        println("createAggregationBuffer: Combine size not specified, create a placeholder sketch with size 8")
+        // scalastyle:on
+        new ItemsSketch[T](8)
+    }
+  }
 
   override def merge(buffer: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
     buffer.merge(input)
@@ -529,12 +542,9 @@ case class ApproxTopKCombine(
   def this(child: Expression, maxItemsTracked: Int) =
     this(child, Literal(maxItemsTracked), 0, 0)
 
-  def this(child: Expression) = {
-    // -1 indicates to check the maxItemsTracked for each sketch
-    // use the value if they are all the same
-    // this(child, Literal(-1), 0, 0)
-    this(child, Literal(10000), 0, 0)
-  }
+  def this(child: Expression) = this(child, Literal(-1), 0, 0)
+
+  //  def this(child: Expression) = this(child, Literal(10000), 0, 0)
 
   override def nullable: Boolean = false
 
@@ -551,6 +561,35 @@ case class ApproxTopKCombine(
 
   override def update(buffer: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
     val sketchBytes = left.eval(input).asInstanceOf[InternalRow].getBinary(0)
+    val currMaxItemsTracked = left.eval(input).asInstanceOf[InternalRow].getInt(2)
+
+    val checkedSizeBuffer = if (combineSizeSpecified) {
+      // scalastyle:off
+      println("update: Combine size specified, re-use the buffer")
+      // scalastyle:on
+      buffer
+    } else {
+      firstSketchCount match {
+        case Some(size) if size == currMaxItemsTracked => buffer
+        case Some(size) if size != currMaxItemsTracked =>
+          throw new IllegalArgumentException(
+            s"All sketches must have the same max items tracked, " +
+              s"but found ${currMaxItemsTracked} and ${size}")
+        case None =>
+          firstSketchCount = Some(currMaxItemsTracked)
+          val ceilMaxMapSize = math.ceil(currMaxItemsTracked / 0.75).toInt
+          val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
+          // scalastyle:off
+          println(s"update: re-set buffer size to $maxMapSize")
+          // scalastyle:on
+          new ItemsSketch[Any](maxMapSize)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Wired firstSketchCount: $firstSketchCount, " +
+              s"currMaxItemsTracked: $currMaxItemsTracked")
+      }
+    }
+
     if (sketchBytes != null) {
       val inputSketch = ItemsSketch.getInstance(
         Memory.wrap(sketchBytes), itemDataType match {
@@ -566,9 +605,9 @@ case class ApproxTopKCombine(
           case dt: DecimalType =>
             new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[Any]]
         })
-      buffer.merge(inputSketch)
+      checkedSizeBuffer.merge(inputSketch)
     }
-    buffer
+    checkedSizeBuffer
   }
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
