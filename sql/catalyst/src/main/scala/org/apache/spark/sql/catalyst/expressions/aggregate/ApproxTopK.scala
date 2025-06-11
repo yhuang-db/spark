@@ -32,98 +32,139 @@ import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, Bool
 import org.apache.spark.unsafe.types.UTF8String
 
 
-/**
- * Abstract class for ApproxTopK
- */
-abstract class AbsApproxTopK[T]
+abstract class AbsApproxTopKBase[T]
   extends TypedImperativeAggregate[ItemsSketch[T]]
   with ExpectsInputTypes {
 
+  def calMaxMapSize(maxItemsTracked: Int): Int = {
+    // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
+    val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
+    // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
+    math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
+  }
+
+  def genSketchSerDe(dataType: DataType): ArrayOfItemsSerDe[T] = {
+    dataType match {
+      case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
+        new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+      case _: LongType | _: TimestampType =>
+        new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+      case _: DoubleType =>
+        new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+      case _: StringType =>
+        new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+      case dt: DecimalType =>
+        new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]]
+    }
+  }
+
+  val allowedItemTypeCollection: TypeCollection = TypeCollection(
+    BooleanType,
+    ByteType,
+    ShortType,
+    IntegerType,
+    LongType,
+    DecimalType,
+    FloatType,
+    DoubleType,
+    DateType,
+    TimestampType,
+    StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def merge(buffer: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
+    buffer.merge(input)
+
+  def updateSketchBuffer(
+      sketchExpression: Expression,
+      buffer: ItemsSketch[Any],
+      input: InternalRow): ItemsSketch[Any] = {
+    val v = sketchExpression.eval(input)
+    if (v != null) {
+      sketchExpression.dataType match {
+        case _: BooleanType => buffer.update(v.asInstanceOf[Boolean])
+        case _: ByteType => buffer.update(v.asInstanceOf[Byte])
+        case _: ShortType => buffer.update(v.asInstanceOf[Short])
+        case _: IntegerType => buffer.update(v.asInstanceOf[Int])
+        case _: LongType => buffer.update(v.asInstanceOf[Long])
+        case _: FloatType => buffer.update(v.asInstanceOf[Float])
+        case _: DoubleType => buffer.update(v.asInstanceOf[Double])
+        case _: DateType => buffer.update(v.asInstanceOf[Int])
+        case _: TimestampType => buffer.update(v.asInstanceOf[Long])
+        case st: StringType =>
+          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
+          buffer.update(cKey.toString)
+        case _: DecimalType => buffer.update(v.asInstanceOf[Decimal])
+      }
+    }
+    buffer
+  }
+}
+
+
+abstract class AbsApproxTopK[T] extends AbsApproxTopKBase[T] {
   val first: Expression
   val second: Expression
   val third: Expression
 
-  lazy val maxMapSize: Int = {
-    val maxItemsTracked = third.eval().asInstanceOf[Int]
-    // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
-    val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
-    // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-    val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-    maxMapSize
-  }
+  override def prettyName: String = "approx_top_k"
+
+  override def nullable: Boolean = false
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      TypeCollection(
-        BooleanType,
-        ByteType,
-        ShortType,
-        IntegerType,
-        LongType,
-        DecimalType,
-        FloatType,
-        DoubleType,
-        DateType,
-        TimestampType,
-        StringTypeWithCollation(supportsTrimCollation = true)),
-      IntegerType,
-      IntegerType)
+    Seq(allowedItemTypeCollection, IntegerType, IntegerType)
 
-  override def merge(sketch: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
-    sketch.merge(input)
-
-  override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](maxMapSize)
-
-  override def serialize(sketch: ItemsSketch[T]): Array[Byte] = first.dataType match {
-    case _: BooleanType =>
-      sketch.toByteArray(new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-      sketch.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: LongType | _: TimestampType =>
-      sketch.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: DoubleType =>
-      sketch.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: StringType =>
-      sketch.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case dt: DecimalType =>
-      sketch.toByteArray(
-        new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-    // TODO: throw error for unsupported data types
+  override def dataType: DataType = {
+    val resultStruct = StructType(
+      StructField("Item", first.dataType, nullable = false) ::
+        StructField("Estimate", LongType, nullable = false) :: Nil)
+    ArrayType(resultStruct, containsNull = false)
   }
 
-  override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = first.dataType match {
-    case _: BooleanType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: LongType | _: TimestampType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: DoubleType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case _: StringType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-    case dt: DecimalType =>
-      ItemsSketch.getInstance(
-        Memory.wrap(buffer),
-        new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-    // TODO: throw error for unsupported data types
+  override def createAggregationBuffer(): ItemsSketch[T] = {
+    val maxItemsTracked = third.eval().asInstanceOf[Int]
+    val maxMapSize = calMaxMapSize(maxItemsTracked)
+    new ItemsSketch[T](maxMapSize)
   }
+
+  override def serialize(buffer: ItemsSketch[T]): Array[Byte] =
+    buffer.toByteArray(genSketchSerDe(first.dataType))
+
+  override def deserialize(storageFormat: Array[Byte]): ItemsSketch[T] =
+    ItemsSketch.getInstance(Memory.wrap(storageFormat), genSketchSerDe(first.dataType))
 }
 
-/**
- * ApproxTopK is an aggregate function that returns the top K frequent items in a dataset.
- * It uses the ItemsSketch from the DataSketches library to maintain an approximate count of items.
- * It returns an array of structs, where each struct contains an item and its estimated count.
- *
- * @param first  Column name or expression whose top K items are to be estimated.
- * @param second K: the number of top items to return.
- * @param third  The maximum number of frequent items to track.
- */
+
+abstract class AbsApproxTopKAccumulate[T] extends AbsApproxTopKBase[T] {
+  val left: Expression
+  val right: Expression
+
+  override def prettyName: String = "approx_top_k_accumulate"
+
+  override def nullable: Boolean = false
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(allowedItemTypeCollection, IntegerType)
+
+  override def dataType: DataType = StructType(
+    StructField("DataSketch", BinaryType, nullable = false) ::
+      StructField("ItemTypeNull", left.dataType) ::
+      StructField("MaxItemsTracked", IntegerType) :: Nil)
+
+  override def createAggregationBuffer(): ItemsSketch[T] = {
+    val maxItemsTracked = right.eval().asInstanceOf[Int]
+    val maxMapSize = calMaxMapSize(maxItemsTracked)
+    new ItemsSketch[T](maxMapSize)
+  }
+
+  override def serialize(buffer: ItemsSketch[T]): Array[Byte] =
+    buffer.toByteArray(genSketchSerDe(left.dataType))
+
+  override def deserialize(storageFormat: Array[Byte]): ItemsSketch[T] =
+    ItemsSketch.getInstance(Memory.wrap(storageFormat), genSketchSerDe(left.dataType))
+}
+
+
 case class ApproxTopK(
     first: Expression,
     second: Expression,
@@ -145,10 +186,6 @@ case class ApproxTopK(
 
   def this(child: Expression) = this(child, Literal(5), Literal(10000), 0, 0)
 
-  override def prettyName: String = "approx_top_k"
-
-  override def nullable: Boolean = false
-
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ApproxTopK =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -161,38 +198,12 @@ case class ApproxTopK(
       newThird: Expression): ApproxTopK =
     copy(first = newFirst, second = newSecond, third = newThird)
 
-  override def dataType: DataType = {
-    val resultEntryType = StructType(
-      StructField("Item", first.dataType, nullable = false) ::
-        StructField("Estimate", LongType, nullable = false) :: Nil)
-    ArrayType(resultEntryType, containsNull = false)
-  }
+  override def update(buffer: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] =
+    updateSketchBuffer(first, buffer, input)
 
-  override def update(sketch: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
-    val v = first.eval(input)
-    if (v != null) {
-      first.dataType match {
-        case _: BooleanType => sketch.update(v.asInstanceOf[Boolean])
-        case _: ByteType => sketch.update(v.asInstanceOf[Byte])
-        case _: ShortType => sketch.update(v.asInstanceOf[Short])
-        case _: IntegerType => sketch.update(v.asInstanceOf[Int])
-        case _: LongType => sketch.update(v.asInstanceOf[Long])
-        case _: FloatType => sketch.update(v.asInstanceOf[Float])
-        case _: DoubleType => sketch.update(v.asInstanceOf[Double])
-        case _: DateType => sketch.update(v.asInstanceOf[Int])
-        case _: TimestampType => sketch.update(v.asInstanceOf[Long])
-        case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          sketch.update(cKey.toString)
-        case _: DecimalType => sketch.update(v.asInstanceOf[Decimal])
-      }
-    }
-    sketch
-  }
-
-  override def eval(sketch: ItemsSketch[Any]): Any = {
+  override def eval(buffer: ItemsSketch[Any]): Any = {
     val topK = second.eval().asInstanceOf[Int]
-    val items = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
+    val items = buffer.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
     val resultLength = math.min(items.length, topK)
     val result = new Array[AnyRef](resultLength)
     for (i <- 0 until resultLength) {
@@ -208,104 +219,10 @@ case class ApproxTopK(
     }
     new GenericArrayData(result)
   }
+
 }
 
-/**
- * Abstract class for ApproxTopKAccumulate
- */
-abstract class AbsApproxTopKAccumulate[T]
-  extends TypedImperativeAggregate[ItemsSketch[T]]
-  with ExpectsInputTypes {
 
-  val left: Expression
-  val right: Expression
-
-  lazy val maxMapSize: Int = {
-    val maxItemsTracked = right.eval().asInstanceOf[Int]
-    // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
-    val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
-    // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-    val maxMapSize = math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-    maxMapSize
-  }
-
-  override def inputTypes: Seq[AbstractDataType] = {
-    Seq(
-      TypeCollection(
-        BooleanType,
-        ByteType,
-        ShortType,
-        IntegerType,
-        LongType,
-        DecimalType,
-        FloatType,
-        DoubleType,
-        DateType,
-        TimestampType,
-        StringTypeWithCollation(supportsTrimCollation = true)),
-      IntegerType)
-  }
-
-  override def dataType: DataType = StructType(
-    StructField("DataSketch", BinaryType, nullable = false) ::
-      StructField("ItemTypeNull", left.dataType) ::
-      StructField("MaxItemsTracked", IntegerType) :: Nil)
-
-  override def createAggregationBuffer(): ItemsSketch[T] = new ItemsSketch[T](maxMapSize)
-
-  override def merge(buffer: ItemsSketch[T], input: ItemsSketch[T]): ItemsSketch[T] =
-    buffer.merge(input)
-
-  override def serialize(buffer: ItemsSketch[T]): Array[Byte] = {
-    left.dataType match {
-      case _: BooleanType =>
-        buffer.toByteArray(new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-        buffer.toByteArray(new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType | _: TimestampType =>
-        buffer.toByteArray(new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType =>
-        buffer.toByteArray(new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType =>
-        buffer.toByteArray(new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case dt: DecimalType =>
-        buffer.toByteArray(
-          new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-    }
-  }
-
-  override def deserialize(buffer: Array[Byte]): ItemsSketch[T] = {
-    left.dataType match {
-      case _: BooleanType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: LongType | _: TimestampType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: DoubleType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case _: StringType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer), new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]])
-      case dt: DecimalType =>
-        ItemsSketch.getInstance(
-          Memory.wrap(buffer),
-          new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[T]])
-    }
-  }
-}
-
-/**
- * ApproxTopKAccumulate is an aggregate function that accumulates the top K frequent items,
- * and return the DataSketch in binary format.
- *
- * @param left  Column name or expression whose top K items are to be estimated.
- * @param right The maximum number of frequent items to track in the sketch.
- */
 case class ApproxTopKAccumulate(
     left: Expression,
     right: Expression,
@@ -330,47 +247,18 @@ case class ApproxTopKAccumulate(
       newLeft: Expression,
       newRight: Expression): ApproxTopKAccumulate = copy(left = newLeft, right = newRight)
 
-  override def nullable: Boolean = false
-
-  override def prettyName: String = "approx_top_k_accumulate"
-
-  override def update(sketch: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] = {
-    val v = left.eval(input)
-    if (v != null) {
-      left.dataType match {
-        case _: BooleanType => sketch.update(v.asInstanceOf[Boolean])
-        case _: ByteType => sketch.update(v.asInstanceOf[Byte])
-        case _: ShortType => sketch.update(v.asInstanceOf[Short])
-        case _: IntegerType => sketch.update(v.asInstanceOf[Int])
-        case _: LongType => sketch.update(v.asInstanceOf[Long])
-        case _: FloatType => sketch.update(v.asInstanceOf[Float])
-        case _: DoubleType => sketch.update(v.asInstanceOf[Double])
-        case _: DateType => sketch.update(v.asInstanceOf[Int])
-        case _: TimestampType => sketch.update(v.asInstanceOf[Long])
-        case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          sketch.update(cKey.toString)
-        case _: DecimalType => sketch.update(v.asInstanceOf[Decimal])
-      }
-    }
-    sketch
-  }
+  override def update(buffer: ItemsSketch[Any], input: InternalRow): ItemsSketch[Any] =
+    updateSketchBuffer(left, buffer, input)
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
     val sketchBytes = serialize(buffer)
     val maxItemsTracked = right.eval().asInstanceOf[Int]
     InternalRow.apply(sketchBytes, null, maxItemsTracked)
   }
+
 }
 
-/**
- * ApproxTopKEstimate is an expression that estimates the top K frequent items from a DataSketch.
- * It takes a DataSketch in binary format and returns an array of structs, where each struct
- * contains an item and its estimated count.
- *
- * @param left  The DataSketch in binary format.
- * @param right K: the number of top items to return.
- */
+
 case class ApproxTopKEstimate(left: Expression, right: Expression)
   extends BinaryExpression
   with CodegenFallback
@@ -398,9 +286,9 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
       newLeft: Expression,
       newRight: Expression): Expression = copy(left = newLeft, right = newRight)
 
-  override def nullIntolerant: Boolean = true
-
   override def prettyName: String = "approx_top_k_estimate"
+
+  override def nullIntolerant: Boolean = true
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val dataSketchBytes = input1.asInstanceOf[InternalRow].getBinary(0)

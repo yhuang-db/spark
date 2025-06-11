@@ -190,14 +190,23 @@ class ApproxTopKSuite
     res1.createOrReplaceTempView("accumulation")
     val res2 = sql("SELECT approx_top_k_estimate(acc) FROM accumulation;")
     res2.show(truncate = false)
+    checkAnswer(res2, Row(Seq(Row(0, 3), Row(1, 2), Row(4, 1), Row(2, 1), Row(3, 1))))
   }
 
   test("SPARK-ace: accumulate and estimate test of String type") {
     val res = sql(
       "SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2)" +
         "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    res.show(truncate = false)
     checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
+  }
+
+  test("SPARK-ace: accumulate and estimate test of Decimal type") {
+    val res = sql(
+      "SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2) " +
+        "FROM VALUES (0.0), (0.0), (0.0) ,(1.0), (1.0), (2.0), (3.0), (4.0) AS tab(expr);")
+    checkAnswer(
+      res,
+      Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 
   test("SPARK-combine1: test of accumulate, combine and estimate") {
