@@ -149,7 +149,7 @@ abstract class AbsApproxTopKAccumulate[T] extends AbsApproxTopKBase[T] {
   override def dataType: DataType = StructType(
     StructField("DataSketch", BinaryType, nullable = false) ::
       StructField("ItemTypeNull", left.dataType) ::
-      StructField("MaxItemsTracked", IntegerType) :: Nil)
+      StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
 
   override def createAggregationBuffer(): ItemsSketch[T] = {
     val maxItemsTracked = right.eval().asInstanceOf[Int]
