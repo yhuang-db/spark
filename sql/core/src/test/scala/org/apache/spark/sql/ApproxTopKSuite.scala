@@ -183,15 +183,12 @@ class ApproxTopKSuite
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 
-  test("SPARK-ace: test of accumulate and estimate") {
-    val res1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+  test("SPARK-ace: accumulate and estimate test of Integer type") {
+    val acc = sql("SELECT approx_top_k_accumulate(expr) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (3), (4) AS tab(expr);")
-    res1.show(truncate = false)
-
-    res1.createOrReplaceTempView("accumulation")
-    val res2 = sql("SELECT approx_top_k_estimate(acc) FROM accumulation;")
-    res2.show(truncate = false)
-    checkAnswer(res2, Row(Seq(Row(0, 3), Row(1, 2), Row(4, 1), Row(2, 1), Row(3, 1))))
+    acc.createOrReplaceTempView("accumulation")
+    val res = sql("SELECT approx_top_k_estimate(acc) FROM accumulation;")
+    checkAnswer(res, Row(Seq(Row(0, 3), Row(1, 2), Row(4, 1), Row(2, 1), Row(3, 1))))
   }
 
   test("SPARK-ace: accumulate and estimate test of String type") {
@@ -210,67 +207,58 @@ class ApproxTopKSuite
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 
-  test("SPARK-combine1: test of accumulate, combine and estimate") {
-    val res1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (3), (4) AS tab(expr);")
-    res1.show(truncate = false)
-    res1.createOrReplaceTempView("accumulation1")
-
-    val res2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    res2.show(truncate = false)
-    res2.createOrReplaceTempView("accumulation2")
-
-    val res3 = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    res3.show(truncate = false)
-    res3.createOrReplaceTempView("combined")
-
-    val res4 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    res4.show(truncate = false)
-  }
-
-  test("SPARK-combine2: test of accumulate, combine and estimate 2") {
-    val res1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+  test("SPARK-combine: same type, same size, specified combine size - success") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    res1.show(truncate = false)
-    res1.createOrReplaceTempView("accumulation1")
+    acc1.createOrReplaceTempView("accumulation1")
 
-    val res2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    res2.show(truncate = false)
-    res2.createOrReplaceTempView("accumulation2")
+    acc2.createOrReplaceTempView("accumulation2")
 
-    val res3 = sql("SELECT approx_top_k_combine(acc) as com " +
+    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
       "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    res3.show(truncate = false)
-    res3.createOrReplaceTempView("combined")
+    comb.createOrReplaceTempView("combined")
 
-    val res4 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    res4.show(truncate = false)
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
   }
 
-  test("SPARK-combine3: test of accumulate, combine and estimate 3") {
-    val res1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+  test("SPARK-combine: same type, same size, unspecified combine size - success") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    res1.show(truncate = false)
-    res1.createOrReplaceTempView("accumulation1")
+    acc1.createOrReplaceTempView("accumulation1")
 
-    val res2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    res2.show(truncate = false)
-    res2.createOrReplaceTempView("accumulation2")
+    acc2.createOrReplaceTempView("accumulation2")
 
-    val res3 = sql("SELECT approx_top_k_combine(acc, 30) as com " +
+    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
       "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    res3.show(truncate = false)
-    res3.createOrReplaceTempView("combined")
+    comb.createOrReplaceTempView("combined")
 
-    val res4 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    res4.show(truncate = false)
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
   }
 
-  test("SPARK-combine4: test of accumulate, combine and estimate 4") {
+  test("SPARK-combine: same type, different size, specified combine size - success") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+    acc1.createOrReplaceTempView("accumulation1")
+
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
+      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
+    acc2.createOrReplaceTempView("accumulation2")
+
+    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    comb.createOrReplaceTempView("combination")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combination;")
+    checkAnswer(est, Row(Seq(Row(2, 4), Row(1, 4), Row(0, 3), Row(3, 3), Row(4, 2))))
+  }
+
+  test("SPARK-combine: same type, different size, unspecified combine size - fail") {
     val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
     acc1.createOrReplaceTempView("accumulation1")
@@ -283,22 +271,35 @@ class ApproxTopKSuite
       "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
     comb.createOrReplaceTempView("combination")
 
-    val res = sql("SELECT approx_top_k_estimate(com) FROM combination;")
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combination;")
 
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
-        //        comb.collect()
-        res.collect()
+        est.collect()
       },
       condition = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
-      parameters = Map(
-        "size1" -> "10",
-        "size2" -> "20"
-      )
+      parameters = Map("size1" -> "10", "size2" -> "20")
     )
   }
 
-  test("SPARK-combine5: test of accumulate, combine and estimate 5") {
+  test("SPARK-combine: different type (int VS string), same size, specified combine size - fail") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+    acc1.createOrReplaceTempView("accumulation1")
+
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
+    acc2.createOrReplaceTempView("accumulation2")
+
+    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    comb.createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    est.show()
+  }
+
+  test("SPARK-combin: test of accumulate, combine and estimate 5") {
     val res1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
     res1.show(truncate = false)
@@ -323,5 +324,54 @@ class ApproxTopKSuite
 
     val res5 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
     res5.show(truncate = false)
+  }
+
+  test("SPARK-combin: test of accumulate, combine and estimate 6") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
+    acc1.createOrReplaceTempView("accumulation1")
+
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (1.0), (1.0), (2.0), (2.0), (3.0), (3.0), (4.0), (4.0) AS tab(expr);")
+    acc2.createOrReplaceTempView("accumulation2")
+
+    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    comb.createOrReplaceTempView("combination")
+
+    comb.show()
+  }
+
+  test("SPARK-combin: test of accumulate, combine and estimate 7") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (0.0), (0.0), (0.0), (1.0), (1.0), (2.0), (2.0), (3.0) AS tab(expr);")
+    acc1.createOrReplaceTempView("accumulation1")
+
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES (1.0), (1.0), (2.0), (2.0), (3.0), (3.0), (4.0), (4.0) AS tab(expr);")
+    acc2.createOrReplaceTempView("accumulation2")
+
+    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    comb.createOrReplaceTempView("combination")
+
+    comb.show()
+  }
+
+  test("SPARK-combin: test of accumulate, combine and estimate 8") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
+    acc1.createOrReplaceTempView("accumulation1")
+
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
+      "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
+    acc2.createOrReplaceTempView("accumulation2")
+
+    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    comb.createOrReplaceTempView("combination")
+
+    val res = sql("SELECT approx_top_k_estimate(com) FROM combination;")
+    res.show(truncate = false)
   }
 }
