@@ -195,7 +195,7 @@ case class ApproxTopKCombine(
     val inputSketch = try {
       ItemsSketch.getInstance(Memory.wrap(inputSketchBytes), genSketchSerDe(buffer.getItemDataType))
     } catch {
-      case e: SketchesArgumentException =>
+      case _: SketchesArgumentException =>
         throw new SparkUnsupportedOperationException(
           errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
         )
@@ -208,7 +208,14 @@ case class ApproxTopKCombine(
   }
 
   override def eval(buffer: CombineInternal[Any]): Any = {
-    val sketchBytes = buffer.getSketch.toByteArray(genSketchSerDe(buffer.getItemDataType))
+    val sketchBytes = try {
+      buffer.getSketch.toByteArray(genSketchSerDe(buffer.getItemDataType))
+    } catch {
+      case _: ArrayStoreException =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
+        )
+    }
     val maxItemsTracked = buffer.getMaxItemsTracked
     InternalRow.apply(sketchBytes, null, maxItemsTracked)
   }
