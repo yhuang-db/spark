@@ -18,7 +18,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.common.{ArrayOfBooleansSerDe, ArrayOfDoublesSerDe, ArrayOfItemsSerDe, ArrayOfLongsSerDe, ArrayOfNumbersSerDe, ArrayOfStringsSerDe}
+import org.apache.datasketches.common.{ArrayOfBooleansSerDe, ArrayOfDoublesSerDe, ArrayOfItemsSerDe, ArrayOfLongsSerDe, ArrayOfNumbersSerDe, ArrayOfStringsSerDe, SketchesArgumentException}
 import org.apache.datasketches.frequencies.ItemsSketch
 import org.apache.datasketches.memory.Memory
 
@@ -107,30 +107,22 @@ abstract class AbsApproxTopKCombine[T]
   }
 
   override def merge(buffer: CombineInternal[T], input: CombineInternal[T]): CombineInternal[T] = {
-    if (buffer.getItemDataType != input.getItemDataType) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED",
-        messageParameters = Map(
-          "type1" -> buffer.getItemDataType.toString,
-          "type2" -> input.getItemDataType.toString))
-    } else {
-      if (!combineSizeSpecified) {
-        // check size
-        if (buffer.getMaxItemsTracked == -1) {
-          // If buffer is a placeholder sketch, set it to the input sketch's max items tracked
-          buffer.setMaxItemsTracked(input.getMaxItemsTracked)
-        }
-        if (buffer.getMaxItemsTracked != input.getMaxItemsTracked) {
-          throw new SparkUnsupportedOperationException(
-            errorClass = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
-            messageParameters = Map(
-              "size1" -> buffer.getMaxItemsTracked.toString,
-              "size2" -> input.getMaxItemsTracked.toString))
-        }
+    if (!combineSizeSpecified) {
+      // check size
+      if (buffer.getMaxItemsTracked == -1) {
+        // If buffer is a placeholder sketch, set it to the input sketch's max items tracked
+        buffer.setMaxItemsTracked(input.getMaxItemsTracked)
       }
-      buffer.getSketch.merge(input.getSketch)
-      buffer
+      if (buffer.getMaxItemsTracked != input.getMaxItemsTracked) {
+        throw new SparkUnsupportedOperationException(
+          errorClass = "APPROX_TOP_K_SKETCH_SIZE_UNMATCHED",
+          messageParameters = Map(
+            "size1" -> buffer.getMaxItemsTracked.toString,
+            "size2" -> input.getMaxItemsTracked.toString))
+      }
     }
+    buffer.getSketch.merge(input.getSketch)
+    buffer
   }
 
   override def serialize(buffer: CombineInternal[T]): Array[Byte] = {
@@ -200,8 +192,14 @@ case class ApproxTopKCombine(
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputSketchBytes = left.eval(input).asInstanceOf[InternalRow].getBinary(0)
     val inputMaxItemsTracked = left.eval(input).asInstanceOf[InternalRow].getInt(2)
-    val inputSketch = ItemsSketch.getInstance(
-      Memory.wrap(inputSketchBytes), genSketchSerDe(buffer.getItemDataType))
+    val inputSketch = try {
+      ItemsSketch.getInstance(Memory.wrap(inputSketchBytes), genSketchSerDe(buffer.getItemDataType))
+    } catch {
+      case e: SketchesArgumentException =>
+        throw new SparkUnsupportedOperationException(
+          errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
+        )
+    }
     buffer.getSketch.merge(inputSketch)
     if (!combineSizeSpecified) {
       buffer.setMaxItemsTracked(inputMaxItemsTracked)

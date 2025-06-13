@@ -296,7 +296,11 @@ class ApproxTopKSuite
     comb.createOrReplaceTempView("combined")
 
     val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    est.show()
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        est.collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
   }
 
   test("SPARK-combin: test of accumulate, combine and estimate 5") {
