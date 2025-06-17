@@ -373,22 +373,6 @@ class CombineInternal[T](sketch: ItemsSketch[T], itemDataType: DataType, var max
   def getMaxItemsTracked: Int = maxItemsTracked
 
   def setMaxItemsTracked(maxItemsTracked: Int): Unit = this.maxItemsTracked = maxItemsTracked
-
-  def itemDataTypeToByte: Byte = {
-    itemDataType match {
-      case _: BooleanType => 0
-      case _: ByteType => 1
-      case _: ShortType => 2
-      case _: IntegerType => 3
-      case _: FloatType => 4
-      case _: DateType => 5
-      case _: LongType => 6
-      case _: TimestampType => 7
-      case _: DoubleType => 8
-      case _: StringType => 9
-      case _: DecimalType => 10
-    }
-  }
 }
 
 case class ApproxTopKCombine(
@@ -483,33 +467,16 @@ case class ApproxTopKCombine(
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
     val sketchBytes = buffer.getSketch.toByteArray(
       ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    val itemTypeByte = buffer.itemDataTypeToByte
     val maxItemsTrackedByte = buffer.getMaxItemsTracked.toByte
-    val byteArray = new Array[Byte](sketchBytes.length + 2)
-    byteArray(0) = itemTypeByte
-    byteArray(1) = maxItemsTrackedByte
-    System.arraycopy(sketchBytes, 0, byteArray, 2, sketchBytes.length)
+    val byteArray = new Array[Byte](sketchBytes.length + 1)
+    byteArray(0) = maxItemsTrackedByte
+    System.arraycopy(sketchBytes, 0, byteArray, 1, sketchBytes.length)
     byteArray
   }
 
   override def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
-    val itemTypeByte = buffer(0)
-    val maxItemsTracked = buffer(1).toInt
-    val itemDataType = itemTypeByte match {
-      case 0 => BooleanType
-      case 1 => ByteType
-      case 2 => ShortType
-      case 3 => IntegerType
-      case 4 => FloatType
-      case 5 => DateType
-      case 6 => LongType
-      case 7 => TimestampType
-      case 8 => DoubleType
-      case 9 => StringType
-      case 10 => DecimalType.SYSTEM_DEFAULT // Default precision and scale for DecimalType
-      case _ => throw new IllegalArgumentException(s"Unknown item type byte: $itemTypeByte")
-    }
-    val sketchBytes = buffer.slice(2, buffer.length)
+    val maxItemsTracked = buffer(0).toInt
+    val sketchBytes = buffer.slice(1, buffer.length)
     val sketch = ItemsSketch.getInstance(
       Memory.wrap(sketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
     new CombineInternal[Any](sketch, itemDataType, maxItemsTracked)
