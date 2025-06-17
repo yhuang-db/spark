@@ -68,7 +68,7 @@ case class ApproxTopK(
     require(second.eval() != null, "K cannot be NULL")
     require(k > 0, "K must be greater than 0")
   }
-  if (!second.isInstanceOf[Unevaluable]) {
+  if (!third.isInstanceOf[Unevaluable]) {
     require(third.eval() != null, "Number of items tracked cannot be NULL")
     require(numTracked > 0, "Number of items tracked must be greater than 0")
   }

@@ -21,6 +21,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
@@ -183,6 +184,93 @@ class ApproxTopKSuite
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 
+  test("SPARK-value: invalid k value") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT approx_top_k(expr, -1) FROM VALUES (0), (1), (2) AS tab(expr);")
+      },
+      condition = "FAILED_FUNCTION_CALL",
+      parameters = Map("funcName" -> "`approx_top_k`"),
+      queryContext = Array(ExpectedContext("approx_top_k(expr, -1)", 7, 28))
+    )
+  }
+
+  test("SPARK-value: invalid null k value") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT approx_top_k(expr, NULL) FROM VALUES (0), (1), (2) AS tab(expr);")
+      },
+      condition = "FAILED_FUNCTION_CALL",
+      parameters = Map("funcName" -> "`approx_top_k`"),
+      queryContext = Array(ExpectedContext("approx_top_k(expr, NULL)", 7, 30))
+    )
+  }
+
+  test("SPARK-value: invalid maxItemsTracked value") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT approx_top_k(expr, 10, -1) FROM VALUES (0), (1), (2) AS tab(expr);")
+      },
+      condition = "FAILED_FUNCTION_CALL",
+      parameters = Map("funcName" -> "`approx_top_k`"),
+      queryContext = Array(ExpectedContext("approx_top_k(expr, 10, -1)", 7, 32))
+
+    )
+  }
+
+  test("SPARK-value: invalid null maxItemsTracked value") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT approx_top_k(expr, 10, NULL) FROM VALUES (0), (1), (2) AS tab(expr);")
+      },
+      condition = "FAILED_FUNCTION_CALL",
+      parameters = Map("funcName" -> "`approx_top_k`"),
+      queryContext = Array(ExpectedContext("approx_top_k(expr, 10, NULL)", 7, 34))
+    )
+  }
+
+  test("SPARK-value: invalid k > maxItemsTracked") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT approx_top_k(expr, 10, 5) FROM VALUES (0), (1), (2) AS tab(expr);")
+      },
+      condition = "FAILED_FUNCTION_CALL",
+      parameters = Map("funcName" -> "`approx_top_k`"),
+      queryContext = Array(ExpectedContext("approx_top_k(expr, 10, 5)", 7, 31))
+    )
+  }
+
+  test("SPARK-type: invalid item type array") {
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql("SELECT approx_top_k(expr) FROM VALUES array(1, 2), array(2, 3) AS tab(expr);")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
+        "msg" -> "array columns are not supported",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
+    )
+  }
+
+  test("SPARK-type: invalid item type struct") {
+    sql("SELECT struct(1, 2) AS expr").createOrReplaceTempView("struct_table")
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql("SELECT approx_top_k(expr) FROM struct_table;")
+      },
+      condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+      parameters = Map(
+        "sqlExpr" -> "\"approx_top_k(expr, 5, 10000)\"",
+        "msg" -> "struct columns are not supported",
+        "hint" -> ""
+      ),
+      queryContext = Array(ExpectedContext("approx_top_k(expr)", 7, 24))
+    )
+  }
+
   test("SPARK-ace: accumulate and estimate test of Integer type") {
     val acc = sql("SELECT approx_top_k_accumulate(expr) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (3), (4) AS tab(expr);")
@@ -330,6 +418,7 @@ class ApproxTopKSuite
         "dataType1" -> ("\"STRUCT<DataSketch: BINARY NOT NULL, " +
           "ItemTypeNull: DATE, MaxItemsTracked: INT NOT NULL>\"")
       )
+      // TODO: what is the query context for the error?
     )
   }
 
@@ -382,7 +471,7 @@ class ApproxTopKSuite
       condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
   }
 
-  test("SPARK-debug2: different type (decimal(10, 2) VS decimal(20, 3)), same size - fail") {
+  test("SPARK-combine: different type (decimal(10, 2) VS decimal(20, 3)), same size - fail") {
     val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES CAST(0.0 AS DECIMAL(10, 2)), CAST(0.0 AS DECIMAL(10, 2)), " +
       "CAST(1.0 AS DECIMAL(10, 2)), CAST(1.0 AS DECIMAL(10, 2)), " +
@@ -407,81 +496,5 @@ class ApproxTopKSuite
         est.collect()
       },
       condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
-  }
-
-  test("SPARK-combin: test of accumulate, combine and estimate 5") {
-    val res1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    res1.show(truncate = false)
-    res1.createOrReplaceTempView("accumulation1")
-
-    val res2 = sql("SELECT approx_top_k_accumulate(expr, 20) as acc " +
-      "FROM VALUES (1), (1), (2), (2), (3), (3), (4), (4) AS tab(expr);")
-    res2.show(truncate = false)
-    res2.createOrReplaceTempView("accumulation2")
-
-    val res3 = sql("SELECT approx_top_k_accumulate(expr, 30) as acc " +
-      "FROM VALUES (5), (5), (5), (5), (5), (0), (0), (0) AS tab(expr);")
-    res3.show(truncate = false)
-    res3.createOrReplaceTempView("accumulation3")
-
-    val res4 = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 " +
-      "UNION ALL SELECT acc FROM accumulation2 " +
-      "UNION ALL SELECT acc FROM accumulation3);")
-    res4.show(truncate = false)
-    res4.createOrReplaceTempView("combined")
-
-    val res5 = sql("SELECT approx_top_k_estimate(com) FROM combined;")
-    res5.show(truncate = false)
-  }
-
-  test("SPARK-combin: test of accumulate, combine and estimate 6") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES (1.0), (1.0), (2.0), (2.0), (3.0), (3.0), (4.0), (4.0) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combination")
-
-    comb.show()
-  }
-
-  test("SPARK-combin: test of accumulate, combine and estimate 7") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES (0.0), (0.0), (0.0), (1.0), (1.0), (2.0), (2.0), (3.0) AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES (1.0), (1.0), (2.0), (2.0), (3.0), (3.0), (4.0), (4.0) AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combination")
-
-    comb.show()
-  }
-
-  test("SPARK-combin: test of accumulate, combine and estimate 8") {
-    val acc1 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    acc1.createOrReplaceTempView("accumulation1")
-
-    val acc2 = sql("SELECT approx_top_k_accumulate(expr) as acc " +
-      "FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' AS tab(expr);")
-    acc2.createOrReplaceTempView("accumulation2")
-
-    val comb = sql("SELECT approx_top_k_combine(acc) as com " +
-      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
-    comb.createOrReplaceTempView("combination")
-
-    val res = sql("SELECT approx_top_k_estimate(com) FROM combination;")
-    res.show(truncate = false)
   }
 }
