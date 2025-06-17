@@ -93,12 +93,7 @@ case class ApproxTopK(
     }
   }
 
-  override def dataType: DataType = {
-    val resultStruct = StructType(
-      StructField("Item", itemDataType, nullable = false) ::
-        StructField("Estimate", LongType, nullable = false) :: Nil)
-    ArrayType(resultStruct, containsNull = false)
-  }
+  override def dataType: DataType = ApproxTopK.getResultDataType(itemDataType)
 
   override def createAggregationBuffer(): ItemsSketch[Any] = {
     val maxMapSize = ApproxTopK.calMaxMapSize(numTracked)
@@ -144,27 +139,11 @@ object ApproxTopK {
   val DEFAULT_K: Int = 5
   val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
 
-  def calMaxMapSize(maxItemsTracked: Int): Int = {
-    // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
-    val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
-    // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
-    math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
-  }
-
-  def genSketchSerDe(dataType: DataType): ArrayOfItemsSerDe[Any] = {
-    dataType match {
-      case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-        new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: LongType | _: TimestampType =>
-        new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: DoubleType =>
-        new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: StringType =>
-        new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case dt: DecimalType =>
-        new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[Any]]
-    }
+  def getResultDataType(itemDataType: DataType): DataType = {
+    val resultEntryType = StructType(
+      StructField("Item", itemDataType, nullable = false) ::
+        StructField("Estimate", LongType, nullable = false) :: Nil)
+    ArrayType(resultEntryType, containsNull = false)
   }
 
   def checkItemType(itemType: DataType): Boolean =
@@ -174,6 +153,13 @@ object ApproxTopK {
            _: TimestampType | _: StringType | _: DecimalType => true
       case _ => false
     }
+
+  def calMaxMapSize(maxItemsTracked: Int): Int = {
+    // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
+    val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
+    // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
+    math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
+  }
 
   def createAggregationBuffer(itemExpression: Expression, maxMapSize: Int): ItemsSketch[Any] = {
     itemExpression.dataType match {
@@ -234,6 +220,22 @@ object ApproxTopK {
     }
     new GenericArrayData(result)
   }
+
+  def genSketchSerDe(dataType: DataType): ArrayOfItemsSerDe[Any] = {
+    dataType match {
+      case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+      case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
+        new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+      case _: LongType | _: TimestampType =>
+        new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+      case _: DoubleType =>
+        new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+      case _: StringType =>
+        new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+      case dt: DecimalType =>
+        new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[Any]]
+    }
+  }
 }
 
 case class ApproxTopKAccumulate(
@@ -278,7 +280,6 @@ case class ApproxTopKAccumulate(
     StructField("DataSketch", BinaryType, nullable = false) ::
       StructField("ItemTypeNull", left.dataType) ::
       StructField("MaxItemsTracked", IntegerType, nullable = false) :: Nil)
-
 
   override def createAggregationBuffer(): ItemsSketch[Any] = {
     val maxMapSize = ApproxTopK.calMaxMapSize(numTracked)
@@ -336,17 +337,11 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StructType, IntegerType)
 
-  override def dataType: DataType = {
-    val resultEntryType = StructType(
-      StructField("Item", itemDataType, nullable = false) ::
-        StructField("Estimate", LongType, nullable = false) :: Nil)
-    ArrayType(resultEntryType, containsNull = false)
-  }
+  override def dataType: DataType = ApproxTopK.getResultDataType(itemDataType)
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val dataSketchBytes = input1.asInstanceOf[InternalRow].getBinary(0)
     val topK = input2.asInstanceOf[Int]
-
     val itemsSketch = ItemsSketch.getInstance(
       Memory.wrap(dataSketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
     ApproxTopK.genEvalResult(itemsSketch, topK, itemDataType)
