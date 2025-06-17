@@ -333,7 +333,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-combine: different type (int VS float), same size, specified combine size") {
+  test("SPARK-combine: different type (int VS float), same size, specified combine size - fail") {
     val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES (0), (0), (0), (1), (1), (2), (2), (3) AS tab(expr);")
     acc1.createOrReplaceTempView("accumulation1")
@@ -357,7 +357,7 @@ class ApproxTopKSuite
       condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
   }
 
-  test("SPARK-combine: different type (byte VS short), same size, specified combine size") {
+  test("SPARK-combine: different type (byte VS short), same size, specified combine size - fail") {
     val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
       "FROM VALUES cast(0 AS BYTE), cast(0 AS BYTE), cast(1 AS BYTE), " +
       "cast(1 AS BYTE), cast(2 AS BYTE), cast(3 AS BYTE), " +
@@ -368,6 +368,33 @@ class ApproxTopKSuite
       "FROM VALUES cast(0 AS SHORT), cast(0 AS SHORT), cast(1 AS SHORT), " +
       "cast(1 AS SHORT), cast(2 AS SHORT), cast(3 AS SHORT), " +
       "cast(4 AS SHORT), cast(4 AS SHORT) AS tab(expr);")
+    acc2.createOrReplaceTempView("accumulation2")
+
+    val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +
+      "FROM (SELECT acc from accumulation1 UNION ALL SELECT acc FROM accumulation2);")
+    comb.createOrReplaceTempView("combined")
+
+    val est = sql("SELECT approx_top_k_estimate(com) FROM combined;")
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        est.collect()
+      },
+      condition = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED")
+  }
+
+  test("SPARK-debug2: different type (decimal(10, 2) VS decimal(20, 3)), same size - fail") {
+    val acc1 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES CAST(0.0 AS DECIMAL(10, 2)), CAST(0.0 AS DECIMAL(10, 2)), " +
+      "CAST(1.0 AS DECIMAL(10, 2)), CAST(1.0 AS DECIMAL(10, 2)), " +
+      "CAST(2.0 AS DECIMAL(10, 2)), CAST(3.0 AS DECIMAL(10, 2)), " +
+      "CAST(4.0 AS DECIMAL(10, 2)), CAST(4.0 AS DECIMAL(10, 2)) AS tab(expr);")
+    acc1.createOrReplaceTempView("accumulation1")
+
+    val acc2 = sql("SELECT approx_top_k_accumulate(expr, 10) as acc " +
+      "FROM VALUES CAST(0.0 AS DECIMAL(20, 3)), CAST(0.0 AS DECIMAL(20, 3)), " +
+      "CAST(1.0 AS DECIMAL(20, 3)), CAST(1.0 AS DECIMAL(20, 3)), " +
+      "CAST(2.0 AS DECIMAL(20, 3)), CAST(3.0 AS DECIMAL(20, 3)), " +
+      "CAST(4.0 AS DECIMAL(20, 3)), CAST(4.0 AS DECIMAL(20, 3)) AS tab(expr);")
     acc2.createOrReplaceTempView("accumulation2")
 
     val comb = sql("SELECT approx_top_k_combine(acc, 30) as com " +

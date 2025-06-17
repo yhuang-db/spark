@@ -195,7 +195,7 @@ case class ApproxTopKCombine(
     val inputSketch = try {
       ItemsSketch.getInstance(Memory.wrap(inputSketchBytes), genSketchSerDe(buffer.getItemDataType))
     } catch {
-      case _: SketchesArgumentException =>
+      case _: SketchesArgumentException | _: NumberFormatException =>
         throw new SparkUnsupportedOperationException(
           errorClass = "APPROX_TOP_K_SKETCH_TYPE_UNMATCHED"
         )
