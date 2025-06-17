@@ -72,8 +72,7 @@ class ApproxTopKSuite
   }
 
   test("SPARK-xxxxx: test of Boolean type") {
-    val dfBool = Seq(true, true, false, true, true, false, false).toDF("expr")
-    dfBool.createOrReplaceTempView("t_bool")
+    Seq(true, true, false, true, true, false, false).toDF("expr").createOrReplaceTempView("t_bool")
     val res = sql("SELECT approx_top_k(expr, 1) FROM t_bool;")
     checkAnswer(res, Row(Seq(Row(true, 4))))
   }
@@ -184,7 +183,7 @@ class ApproxTopKSuite
       Row(Seq(Row(new java.math.BigDecimal("0.0"), 3), Row(new java.math.BigDecimal("1.0"), 2))))
   }
 
-  test("SPARK-value: invalid k value") {
+  test("SPARK-xxxxx: invalid k value") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT approx_top_k(expr, -1) FROM VALUES (0), (1), (2) AS tab(expr);")
@@ -195,7 +194,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-value: invalid k value null") {
+  test("SPARK-xxxxx: invalid k value null") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT approx_top_k(expr, NULL) FROM VALUES (0), (1), (2) AS tab(expr);")
@@ -206,7 +205,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-value: invalid maxItemsTracked value") {
+  test("SPARK-xxxxx: invalid maxItemsTracked value") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT approx_top_k(expr, 10, -1) FROM VALUES (0), (1), (2) AS tab(expr);")
@@ -218,7 +217,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-value: invalid maxItemsTracked value null") {
+  test("SPARK-xxxxx: invalid maxItemsTracked value null") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT approx_top_k(expr, 10, NULL) FROM VALUES (0), (1), (2) AS tab(expr);")
@@ -229,7 +228,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-value: invalid k > maxItemsTracked") {
+  test("SPARK-xxxxx: invalid k > maxItemsTracked") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT approx_top_k(expr, 10, 5) FROM VALUES (0), (1), (2) AS tab(expr);")
@@ -240,7 +239,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-type: invalid item type array") {
+  test("SPARK-xxxxx: invalid item type array") {
     checkError(
       exception = intercept[ExtendedAnalysisException] {
         sql("SELECT approx_top_k(expr) FROM VALUES array(1, 2), array(2, 3) AS tab(expr);")
@@ -255,7 +254,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-type: invalid item type struct") {
+  test("SPARK-xxxxx: invalid item type struct") {
     sql("SELECT struct(1, 2) AS expr").createOrReplaceTempView("struct_table")
     checkError(
       exception = intercept[ExtendedAnalysisException] {
