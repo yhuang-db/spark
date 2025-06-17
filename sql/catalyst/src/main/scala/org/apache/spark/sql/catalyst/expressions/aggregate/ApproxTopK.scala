@@ -58,6 +58,7 @@ case class ApproxTopK(
   def this(child: Expression) =
     this(child, Literal(ApproxTopK.DEFAULT_K), Literal(ApproxTopK.DEFAULT_MAX_ITEMS_TRACKED), 0, 0)
 
+  private lazy val itemDataType: DataType = first.dataType
   private lazy val k: Int = second.eval().asInstanceOf[Int]
   private lazy val numTracked: Int = third.eval().asInstanceOf[Int]
 
@@ -81,8 +82,8 @@ case class ApproxTopK(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!ApproxTopK.checkItemType(first.dataType)) {
-      TypeCheckFailure(f"${first.dataType.typeName} columns are not supported")
+    } else if (!ApproxTopK.checkItemType(itemDataType)) {
+      TypeCheckFailure(f"${itemDataType.typeName} columns are not supported")
     } else if (!second.foldable) {
       TypeCheckFailure("K must be a constant literal")
     } else if (!third.foldable) {
@@ -94,7 +95,7 @@ case class ApproxTopK(
 
   override def dataType: DataType = {
     val resultStruct = StructType(
-      StructField("Item", first.dataType, nullable = false) ::
+      StructField("Item", itemDataType, nullable = false) ::
         StructField("Estimate", LongType, nullable = false) :: Nil)
     ArrayType(resultStruct, containsNull = false)
   }
@@ -111,28 +112,14 @@ case class ApproxTopK(
     buffer.merge(input)
 
   override def eval(buffer: ItemsSketch[Any]): Any = {
-    val items = buffer.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
-    val resultLength = math.min(items.length, k)
-    val result = new Array[AnyRef](resultLength)
-    for (i <- 0 until resultLength) {
-      val row = items(i)
-      first.dataType match {
-        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
-             _: FloatType | _: DoubleType | _: DateType | _: TimestampType | _: DecimalType =>
-          result(i) = InternalRow.apply(row.getItem, row.getEstimate)
-        case _: StringType =>
-          val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
-          result(i) = InternalRow.apply(item, row.getEstimate)
-      }
-    }
-    new GenericArrayData(result)
+    ApproxTopK.genEvalResult(buffer, k, itemDataType)
   }
 
   override def serialize(buffer: ItemsSketch[Any]): Array[Byte] =
-    buffer.toByteArray(ApproxTopK.genSketchSerDe(first.dataType))
+    buffer.toByteArray(ApproxTopK.genSketchSerDe(itemDataType))
 
   override def deserialize(storageFormat: Array[Byte]): ItemsSketch[Any] =
-    ItemsSketch.getInstance(Memory.wrap(storageFormat), ApproxTopK.genSketchSerDe(first.dataType))
+    ItemsSketch.getInstance(Memory.wrap(storageFormat), ApproxTopK.genSketchSerDe(itemDataType))
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -228,6 +215,24 @@ object ApproxTopK {
       }
     }
     buffer
+  }
+
+  def genEvalResult(itemsSketch: ItemsSketch[Any], k: Int, itemDataType: DataType): Any = {
+    val items = itemsSketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
+    val resultLength = math.min(items.length, k)
+    val result = new Array[AnyRef](resultLength)
+    for (i <- 0 until resultLength) {
+      val row = items(i)
+      itemDataType match {
+        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
+             _: FloatType | _: DoubleType | _: DateType | _: TimestampType | _: DecimalType =>
+          result(i) = InternalRow.apply(row.getItem, row.getEstimate)
+        case _: StringType =>
+          val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
+          result(i) = InternalRow.apply(item, row.getEstimate)
+      }
+    }
+    new GenericArrayData(result)
   }
 }
 
@@ -343,35 +348,8 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
     val topK = input2.asInstanceOf[Int]
 
     val itemsSketch = ItemsSketch.getInstance(
-      Memory.wrap(dataSketchBytes), itemDataType match {
-        case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-        case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
-          new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-        case _: LongType | _: TimestampType =>
-          new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-        case _: DoubleType =>
-          new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-        case _: StringType =>
-          new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-        case dt: DecimalType =>
-          new ArrayOfDecimalsSerDe(dt.precision, dt.scale).asInstanceOf[ArrayOfItemsSerDe[Any]]
-      })
-
-    val items = itemsSketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
-    val resultLength = math.min(items.length, topK)
-    val result = new Array[AnyRef](resultLength)
-    for (i <- 0 until resultLength) {
-      val row = items(i)
-      itemDataType match {
-        case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType | _: LongType |
-             _: FloatType | _: DoubleType | _: DateType | _: TimestampType | _: DecimalType =>
-          result(i) = InternalRow.apply(row.getItem, row.getEstimate)
-        case _: StringType =>
-          val item = UTF8String.fromString(row.getItem.asInstanceOf[String])
-          result(i) = InternalRow.apply(item, row.getEstimate)
-      }
-    }
-    new GenericArrayData(result)
+      Memory.wrap(dataSketchBytes), ApproxTopK.genSketchSerDe(itemDataType))
+    ApproxTopK.genEvalResult(itemsSketch, topK, itemDataType)
   }
 
   override protected def withNewChildrenInternal(
