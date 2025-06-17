@@ -336,7 +336,7 @@ case class ApproxTopKEstimate(left: Expression, right: Expression)
 
   def this(child: Expression, topK: Int) = this(child, Literal(topK))
 
-  def this(child: Expression) = this(child, Literal(5))
+  def this(child: Expression) = this(child, Literal(ApproxTopK.DEFAULT_K))
 
   private lazy val itemDataType: DataType = {
     // itemDataType is the type of the "ItemTypeNull" field of the output of ACCUMULATE or COMBINE
