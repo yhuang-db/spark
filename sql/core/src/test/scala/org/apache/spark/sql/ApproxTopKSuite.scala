@@ -195,7 +195,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-value: invalid null k value") {
+  test("SPARK-value: invalid k value null") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT approx_top_k(expr, NULL) FROM VALUES (0), (1), (2) AS tab(expr);")
@@ -218,7 +218,7 @@ class ApproxTopKSuite
     )
   }
 
-  test("SPARK-value: invalid null maxItemsTracked value") {
+  test("SPARK-value: invalid maxItemsTracked value null") {
     checkError(
       exception = intercept[AnalysisException] {
         sql("SELECT approx_top_k(expr, 10, NULL) FROM VALUES (0), (1), (2) AS tab(expr);")

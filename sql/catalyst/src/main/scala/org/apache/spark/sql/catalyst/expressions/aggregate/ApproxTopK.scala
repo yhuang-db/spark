@@ -165,7 +165,9 @@ object ApproxTopK {
     }
 
   def calMaxMapSize(maxItemsTracked: Int): Int = {
-    // The maximum capacity of this internal hash map is * 0.75 times * maxMapSize.
+    // The maximum capacity of this internal hash map has maxMapCap = 0.75 * maxMapSize
+    // Therefore, the maxMapSize must be at least ceil(maxItemsTracked / 0.75)
+    // https://datasketches.apache.org/docs/Frequency/FrequentItemsOverview.html
     val ceilMaxMapSize = math.ceil(maxItemsTracked / 0.75).toInt
     // The maxMapSize must be a power of 2 and greater than ceilMaxMapSize
     math.pow(2, math.ceil(math.log(ceilMaxMapSize) / math.log(2))).toInt
